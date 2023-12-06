@@ -1,13 +1,15 @@
-require("@nomicfoundation/hardhat-chai-matchers");
-require("@nomicfoundation/hardhat-ethers");
-require("@nomicfoundation/hardhat-toolbox");
+require('@openzeppelin/hardhat-upgrades');
+require('@nomicfoundation/hardhat-chai-matchers');
+require('@nomicfoundation/hardhat-ethers');
+require('@nomiclabs/hardhat-web3');
+require('hardhat-contract-sizer');
 
-require("dotenv").config();
+require('dotenv').config();
 const args = process.env;
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
-  solidity: "0.8.19",
+  solidity: '0.8.20',
   networks: {
     hardhat: {
       allowUnlimitedContractSize: true,
