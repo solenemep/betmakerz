@@ -44,12 +44,12 @@ contract EventRegistry is IEventRegistry, AccessControlUpgradeable {
     // ||   LISTING   ||
     // =================
 
-    function count() external view returns (uint256) {
+    function countEvents() external view returns (uint256) {
         return _eventAddresses.length();
     }
 
     /// @notice use with count()
-    function list(uint256 offset, uint256 limit) external view returns (address[] memory eventList) {
+    function listEvents(uint256 offset, uint256 limit) external view returns (address[] memory eventList) {
         return _list(offset, limit, _eventAddresses);
     }
 
@@ -72,7 +72,7 @@ contract EventRegistry is IEventRegistry, AccessControlUpgradeable {
     // ||   SETTINGS   ||
     // ==================
 
-    function ableBet(address eventAddress) external onlyRole(ADMIN_ROLE) {
+    function enableBet(address eventAddress) external onlyRole(ADMIN_ROLE) {
         if (_stopBets[eventAddress] != 0) {
             _betAllowance(eventAddress, 0);
         }

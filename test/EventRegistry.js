@@ -71,35 +71,35 @@ describe('EventRegistry', async () => {
     });
   });
   describe('settings', async () => {
-    describe('ableBet', async () => {
-      it('is abled by default', async () => {
+    describe('enableBet', async () => {
+      it('is enabled by default', async () => {
         expect(await eventRegistry.stopBets(eventAddress1)).to.equal(0);
         expect(await eventRegistry.stopBets(eventAddress1)).to.equal(0);
       });
-      it('do nothing if abled', async () => {
+      it('do nothing if enabled', async () => {
         expect(await eventRegistry.stopBets(eventAddress1)).to.equal(0);
 
-        await eventRegistry.connect(admin).ableBet(eventAddress1);
+        await eventRegistry.connect(admin).enableBet(eventAddress1);
         expect(await eventRegistry.stopBets(eventAddress1)).to.equal(0);
       });
-      it('able bet if disabled', async () => {
+      it('enable bet if disabled', async () => {
         await eventRegistry.connect(admin).disableBet(eventAddress1);
         timestamp = await getCurrentBlockTimestamp();
         expect(await eventRegistry.stopBets(eventAddress1)).to.equal(timestamp);
 
-        await eventRegistry.connect(admin).ableBet(eventAddress1);
+        await eventRegistry.connect(admin).enableBet(eventAddress1);
         expect(await eventRegistry.stopBets(eventAddress1)).to.equal(0);
       });
     });
     describe('disableBet', async () => {
-      it('disable bet if abled', async () => {
+      it('disable bet if enabled', async () => {
         expect(await eventRegistry.stopBets(eventAddress1)).to.equal(0);
 
         await eventRegistry.connect(admin).disableBet(eventAddress1);
         timestamp = await getCurrentBlockTimestamp();
         expect(await eventRegistry.stopBets(eventAddress1)).to.equal(timestamp);
       });
-      it('disable bet if abled until future date', async () => {
+      it('disable bet if enabled until future date', async () => {
         const stopBets = toBN(await getCurrentBlockTimestamp())
           .plus(8 * 24 * 60 * 60)
           .toString();
@@ -128,7 +128,7 @@ describe('EventRegistry', async () => {
         await eventRegistry.connect(admin).disableBetAtDate(eventAddress1, stopBets);
         expect(await eventRegistry.stopBets(eventAddress1)).to.equal(0);
       });
-      it('disable bet at date if abled', async () => {
+      it('disable bet at date if enabled', async () => {
         expect(await eventRegistry.stopBets(eventAddress1)).to.equal(0);
 
         const stopBets = toBN(await getCurrentBlockTimestamp())
@@ -137,7 +137,7 @@ describe('EventRegistry', async () => {
         await eventRegistry.connect(admin).disableBetAtDate(eventAddress1, stopBets);
         expect(await eventRegistry.stopBets(eventAddress1)).to.equal(stopBets);
       });
-      it('disable bet at date if abled until future date - new date < ex date', async () => {
+      it('disable bet at date if enabled until future date - new date < ex date', async () => {
         const stopBets1 = toBN(await getCurrentBlockTimestamp())
           .plus(8 * 24 * 60 * 60)
           .toString();
@@ -150,7 +150,7 @@ describe('EventRegistry', async () => {
         await eventRegistry.connect(admin).disableBetAtDate(eventAddress1, stopBets2);
         expect(await eventRegistry.stopBets(eventAddress1)).to.equal(stopBets2);
       });
-      it('disable bet at date if abled until future date - new date > ex date', async () => {
+      it('disable bet at date if enabled until future date - new date > ex date', async () => {
         const stopBets1 = toBN(await getCurrentBlockTimestamp())
           .plus(2 * 24 * 60 * 60)
           .toString();
@@ -197,14 +197,14 @@ describe('EventRegistry', async () => {
 
       expect(await eventRegistry.canBetMock(eventAddress1)).to.equal(true);
     });
-    it('can bet if abled by admin', async () => {
+    it('can bet if enabled by admin', async () => {
       const stopBets = toBN(await getCurrentBlockTimestamp())
         .plus(2 * 24 * 60 * 60)
         .toString();
       await eventRegistry.connect(admin).disableBetAtDate(eventAddress1, stopBets);
       expect(await eventRegistry.stopBets(eventAddress1)).to.equal(stopBets);
 
-      await eventRegistry.connect(admin).ableBet(eventAddress1);
+      await eventRegistry.connect(admin).enableBet(eventAddress1);
       expect(await eventRegistry.canBetMock(eventAddress1)).to.equal(true);
     });
   });
