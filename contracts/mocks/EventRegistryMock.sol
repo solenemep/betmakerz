@@ -18,8 +18,4 @@ contract EventRegistryMock is EventRegistry {
     function stopBets(address eventAddress) external view returns (uint256) {
         return _stopBets[eventAddress];
     }
-
-    function canBetMock(address eventAddress) external view returns (bool) {
-        return _canBet(eventAddress);
-    }
 }

@@ -9,8 +9,7 @@ import "../Event.sol";
 
 /// @author @solenemep
 /// @title EventMock
-/// @notice Registers all event addresses
-/// @notice Carries ownable set up of events
+/// @notice Represents one game
 
 contract EventMock is Event {
 

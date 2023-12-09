@@ -6,8 +6,8 @@ const {
   ADMIN_ROLE,
   getCurrentBlockTimestamp,
   toBN,
-  increaseTimeTo,
   increaseTime,
+  getCosts,
 } = require('./helpers/utils.js');
 
 describe('EventRegistry', async () => {
@@ -15,8 +15,9 @@ describe('EventRegistry', async () => {
 
   let eventRegistry, eventRegistryAddress;
 
-  let event1, eventAddress1;
-  let event2, eventAddress2;
+  let eventAddress;
+  let eventAddress1;
+  let eventAddress2;
 
   let owner;
   let user1, user2, user3;
@@ -38,19 +39,6 @@ describe('EventRegistry', async () => {
 
     await eventRegistry.connect(owner).grantRole(ADMIN_ROLE, admin.address);
 
-    // create events
-    const Event = await ethers.getContractFactory('EventMock');
-
-    let tx = await eventRegistry.connect(admin).createEvent();
-    let receipt = await tx.wait();
-    eventAddress1 = receipt.logs[0].args[0];
-    event1 = await Event.attach(eventAddress1);
-
-    tx = await eventRegistry.connect(admin).createEvent();
-    receipt = await tx.wait();
-    eventAddress2 = receipt.logs[0].args[0];
-    event2 = await Event.attach(eventAddress2);
-
     await snapshot();
   });
 
@@ -71,6 +59,16 @@ describe('EventRegistry', async () => {
     });
   });
   describe('settings', async () => {
+    beforeEach('setup', async () => {
+      // create events
+      let tx = await eventRegistry.connect(admin).createEvent();
+      let receipt = await tx.wait();
+      eventAddress1 = receipt.logs[0].args[0];
+
+      tx = await eventRegistry.connect(admin).createEvent();
+      receipt = await tx.wait();
+      eventAddress2 = receipt.logs[0].args[0];
+    });
     describe('enableBet', async () => {
       it('is enabled by default', async () => {
         expect(await eventRegistry.stopBets(eventAddress1)).to.equal(0);
@@ -176,17 +174,38 @@ describe('EventRegistry', async () => {
         expect(await eventRegistry.stopBets(eventAddress1)).to.equal(timestamp);
       });
     });
+    describe('setCommissionPercentage', async () => {
+      it('sets 10% commission percentage by default', async () => {
+        expect(await eventRegistry.commissionPercentage()).to.equal(10);
+      });
+      it('sets commission percentage by admin', async () => {
+        const newCommissionPercentage = 25;
+
+        await eventRegistry.connect(admin).setCommissionPercentage(newCommissionPercentage);
+        expect(await eventRegistry.commissionPercentage()).to.equal(newCommissionPercentage);
+      });
+    });
   });
   describe('status', async () => {
+    beforeEach('setup', async () => {
+      // create events
+      let tx = await eventRegistry.connect(admin).createEvent();
+      let receipt = await tx.wait();
+      eventAddress1 = receipt.logs[0].args[0];
+
+      tx = await eventRegistry.connect(admin).createEvent();
+      receipt = await tx.wait();
+      eventAddress2 = receipt.logs[0].args[0];
+    });
     it('can bet by default', async () => {
-      expect(await eventRegistry.canBetMock(eventAddress1)).to.equal(true);
+      expect(await eventRegistry.canBet(eventAddress1)).to.equal(true);
     });
     it('cannot bet if disabled', async () => {
       await eventRegistry.connect(admin).disableBet(eventAddress1);
       timestamp = await getCurrentBlockTimestamp();
       expect(await eventRegistry.stopBets(eventAddress1)).to.equal(timestamp);
 
-      expect(await eventRegistry.canBetMock(eventAddress1)).to.equal(false);
+      expect(await eventRegistry.canBet(eventAddress1)).to.equal(false);
     });
     it('can bet if disabled in future', async () => {
       const stopBets = toBN(await getCurrentBlockTimestamp())
@@ -195,7 +214,7 @@ describe('EventRegistry', async () => {
       await eventRegistry.connect(admin).disableBetAtDate(eventAddress1, stopBets);
       expect(await eventRegistry.stopBets(eventAddress1)).to.equal(stopBets);
 
-      expect(await eventRegistry.canBetMock(eventAddress1)).to.equal(true);
+      expect(await eventRegistry.canBet(eventAddress1)).to.equal(true);
     });
     it('can bet if enabled by admin', async () => {
       const stopBets = toBN(await getCurrentBlockTimestamp())
@@ -205,7 +224,116 @@ describe('EventRegistry', async () => {
       expect(await eventRegistry.stopBets(eventAddress1)).to.equal(stopBets);
 
       await eventRegistry.connect(admin).enableBet(eventAddress1);
-      expect(await eventRegistry.canBetMock(eventAddress1)).to.equal(true);
+      expect(await eventRegistry.canBet(eventAddress1)).to.equal(true);
+    });
+  });
+  describe('createEvent', async () => {
+    it('create 1 event successfully', async () => {
+      let countEvents = await eventRegistry.countEvents();
+      expect(countEvents).to.equal(0);
+
+      let listEvents = await eventRegistry.listEvents(0, countEvents);
+      expect(listEvents.length).to.equal(0);
+
+      let countOpenEvents = await eventRegistry.countOpenEvents();
+      expect(countOpenEvents).to.equal(0);
+
+      let listOpenEvents = await eventRegistry.listOpenEvents(0, countOpenEvents);
+      expect(listOpenEvents.length).to.equal(0);
+
+      let tx = await eventRegistry.connect(admin).createEvent();
+      let receipt = await tx.wait();
+      const eventAddress = receipt.logs[0].args[0];
+
+      countEvents = await eventRegistry.countEvents();
+      expect(countEvents).to.equal(1);
+
+      listEvents = await eventRegistry.listEvents(0, countEvents);
+      expect(listEvents.length).to.equal(1);
+      expect(listEvents[0]).to.equal(eventAddress);
+
+      countOpenEvents = await eventRegistry.countOpenEvents();
+      expect(countOpenEvents).to.equal(1);
+
+      listOpenEvents = await eventRegistry.listOpenEvents(0, countOpenEvents);
+      expect(listOpenEvents.length).to.equal(1);
+      expect(listOpenEvents[0]).to.equal(eventAddress);
+    });
+    it('create 2 events successfully', async () => {
+      let countEvents = await eventRegistry.countEvents();
+      expect(countEvents).to.equal(0);
+
+      let listEvents = await eventRegistry.listEvents(0, countEvents);
+      expect(listEvents.length).to.equal(0);
+
+      let countOpenEvents = await eventRegistry.countOpenEvents();
+      expect(countOpenEvents).to.equal(0);
+
+      let listOpenEvents = await eventRegistry.listOpenEvents(0, countOpenEvents);
+      expect(listOpenEvents.length).to.equal(0);
+
+      let tx = await eventRegistry.connect(admin).createEvent();
+      let receipt = await tx.wait();
+      const eventAddress1 = receipt.logs[0].args[0];
+
+      tx = await eventRegistry.connect(admin).createEvent();
+      receipt = await tx.wait();
+      const eventAddress2 = receipt.logs[0].args[0];
+
+      countEvents = await eventRegistry.countEvents();
+      expect(countEvents).to.equal(2);
+
+      listEvents = await eventRegistry.listEvents(0, countEvents);
+      expect(listEvents.length).to.equal(2);
+      expect(listEvents[0]).to.equal(eventAddress1);
+      expect(listEvents[1]).to.equal(eventAddress2);
+
+      countOpenEvents = await eventRegistry.countOpenEvents();
+      expect(countOpenEvents).to.equal(2);
+
+      listOpenEvents = await eventRegistry.listOpenEvents(0, countOpenEvents);
+      expect(listOpenEvents.length).to.equal(2);
+      expect(listOpenEvents[0]).to.equal(eventAddress1);
+      expect(listOpenEvents[1]).to.equal(eventAddress2);
+    });
+    it('deploys new Event contract', async () => {
+      const Event = await ethers.getContractFactory('EventMock');
+
+      let tx = await eventRegistry.connect(admin).createEvent();
+      let receipt = await tx.wait();
+      const eventAddress = receipt.logs[0].args[0];
+      const event = Event.attach(eventAddress);
+
+      expect(await event.eventRegistry()).to.equal(eventRegistryAddress);
+    });
+    it('emits EventCreated event', async () => {
+      await expect(eventRegistry.connect(admin).createEvent()).to.emit(eventRegistry, 'EventCreated');
+    });
+  });
+  describe('endEvent', async () => {});
+  describe('cancelEvent', async () => {});
+  describe('gas cost', async () => {
+    let tx;
+
+    it('createEvent', async () => {
+      tx = await eventRegistry.connect(admin).createEvent();
+      await getCosts(tx);
+    });
+    it('endEvent', async () => {
+      tx = await eventRegistry.connect(admin).createEvent();
+      receipt = await tx.wait();
+      eventAddress = receipt.logs[0].args[0];
+
+      tx = await eventRegistry.connect(admin).endEvent(eventAddress);
+      await getCosts(tx);
+    });
+    it('cancelEvent', async () => {
+      tx = await eventRegistry.connect(admin).createEvent();
+      receipt = await tx.wait();
+      eventAddress = receipt.logs[0].args[0];
+
+      tx = await eventRegistry.connect(admin).cancelEvent(eventAddress);
+      await getCosts(tx);
     });
   });
 });

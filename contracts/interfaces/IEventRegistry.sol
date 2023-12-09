@@ -2,5 +2,5 @@
 pragma solidity 0.8.20;
 
 interface IEventRegistry {
-    function canBet() external view returns (bool);
+    function canBet(address eventAddress) external view returns (bool);
 }

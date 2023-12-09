@@ -20,7 +20,7 @@ error NotEventRegistry();
 contract Event is IEvent {
     using EnumerableSet for EnumerableSet.AddressSet;
 
-    address internal _eventRegistry;
+    address public eventRegistry;
 
     EnumerableSet.AddressSet internal _bettorAddresses;
     mapping(address => BetInfo) public betInfo;
@@ -28,14 +28,14 @@ contract Event is IEvent {
     mapping(Team => PoolInfo) public poolInfo;
 
     modifier onlyEventRegistry() {
-        if (msg.sender != _eventRegistry) {
+        if (msg.sender != eventRegistry) {
             revert NotEventRegistry();
         }
         _;
     }
 
     constructor() {
-        _eventRegistry = msg.sender;
+        eventRegistry = msg.sender;
     }
 
     // =============
@@ -43,7 +43,7 @@ contract Event is IEvent {
     // =============
 
     function placeBet(uint256 betAmount) external {
-        if (!IEventRegistry(_eventRegistry).canBet()) {
+        if (!IEventRegistry(eventRegistry).canBet(address(this))) {
             revert CannotBet();
         }
     }

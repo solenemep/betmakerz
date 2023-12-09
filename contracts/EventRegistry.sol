@@ -24,7 +24,10 @@ contract EventRegistry is IEventRegistry, AccessControlUpgradeable {
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
 
     EnumerableSet.AddressSet internal _eventAddresses;
+    EnumerableSet.AddressSet internal _openEventAddresses;
     mapping(address => uint256) internal _stopBets;
+
+    uint256 public commissionPercentage;
 
     event EventCreated(address indexed eventAddress);
     event EventEnded(address indexed eventAddress);
@@ -38,6 +41,8 @@ contract EventRegistry is IEventRegistry, AccessControlUpgradeable {
     function initialize(address owner) external initializer {
         __AccessControl_init();
         _grantRole(DEFAULT_ADMIN_ROLE, owner);
+
+        commissionPercentage = 10;
     }
 
     // =================
@@ -48,9 +53,18 @@ contract EventRegistry is IEventRegistry, AccessControlUpgradeable {
         return _eventAddresses.length();
     }
 
-    /// @notice use with count()
+    function countOpenEvents() external view returns (uint256) {
+        return _openEventAddresses.length();
+    }
+
+    /// @notice use with countEvents()
     function listEvents(uint256 offset, uint256 limit) external view returns (address[] memory eventList) {
         return _list(offset, limit, _eventAddresses);
+    }
+
+    /// @notice use with countOpenEvents()
+    function listOpenEvents(uint256 offset, uint256 limit) external view returns (address[] memory eventList) {
+        return _list(offset, limit, _openEventAddresses);
     }
 
     function _list(
@@ -96,15 +110,15 @@ contract EventRegistry is IEventRegistry, AccessControlUpgradeable {
         _stopBets[eventAddress] = stopBets;
     }
 
+    function setCommissionPercentage(uint256 newCommissionPercentage) external onlyRole(ADMIN_ROLE) {
+        commissionPercentage = newCommissionPercentage;
+    }
+
     // ================
     // ||   STATUS   ||
     // ================
 
-    function canBet() external view override returns (bool) {
-        _canBet(msg.sender);
-    }
-
-    function _canBet(address eventAddress) internal view returns (bool) {
+    function canBet(address eventAddress) public view override returns (bool) {
         if (_stopBets[eventAddress] == 0 || block.timestamp < _stopBets[eventAddress]) {
             return true;
         }
@@ -117,7 +131,9 @@ contract EventRegistry is IEventRegistry, AccessControlUpgradeable {
     function createEvent() external onlyRole(ADMIN_ROLE) {
         Event eventContract = new Event();
         address eventAddress = address(eventContract);
+
         _eventAddresses.add(eventAddress);
+        _openEventAddresses.add(eventAddress);
 
         emit EventCreated(eventAddress);
     }
@@ -137,8 +153,9 @@ contract EventRegistry is IEventRegistry, AccessControlUpgradeable {
     }
 
     function _closeEvent(address eventAddress) internal {
-        if (_canBet(eventAddress)) {
+        if (canBet(eventAddress)) {
             _stopBets[eventAddress] = block.timestamp;
         }
+        _openEventAddresses.remove(eventAddress);
     }
 }
