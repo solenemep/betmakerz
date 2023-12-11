@@ -6,11 +6,12 @@ const init = async () => {
   const users = await ethers.getSigners();
 
   // deploy usdt mock
-  const usdt = '';
+  const usdt = await ethers.deployContract('USDTMock', [users[0].address]);
+  await usdt.waitForDeployment();
 
   // deploy EventRegistry
   const EventRegistry = await ethers.getContractFactory('EventRegistryMock');
-  const eventRegistry = await upgrades.deployProxy(EventRegistry, [users[0].address]);
+  const eventRegistry = await upgrades.deployProxy(EventRegistry, [users[0].address, await usdt.getAddress()]);
   await eventRegistry.waitForDeployment();
   console.log('EventRegistry deployed to : ', await eventRegistry.getAddress());
 

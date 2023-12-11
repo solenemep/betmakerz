@@ -12,5 +12,5 @@ import "../Event.sol";
 /// @notice Represents one game
 
 contract EventMock is Event {
-
+    constructor(address tokenAddress) Event(tokenAddress) {}
 }

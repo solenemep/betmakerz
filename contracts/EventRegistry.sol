@@ -23,6 +23,8 @@ contract EventRegistry is IEventRegistry, AccessControlUpgradeable {
 
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
 
+    address public tokenAddress;
+
     EnumerableSet.AddressSet internal _eventAddresses;
     EnumerableSet.AddressSet internal _openEventAddresses;
     mapping(address => uint256) internal _stopBets;
@@ -38,10 +40,11 @@ contract EventRegistry is IEventRegistry, AccessControlUpgradeable {
         _disableInitializers();
     }
 
-    function initialize(address owner) external initializer {
+    function initialize(address owner, address _tokenAddress) external initializer {
         __AccessControl_init();
         _grantRole(DEFAULT_ADMIN_ROLE, owner);
 
+        tokenAddress = _tokenAddress;
         commissionPercentage = 10;
     }
 
@@ -71,20 +74,24 @@ contract EventRegistry is IEventRegistry, AccessControlUpgradeable {
         uint256 offset,
         uint256 limit,
         EnumerableSet.AddressSet storage set
-    ) internal view returns (address[] memory eventList) {
+    ) internal view returns (address[] memory list) {
         uint256 to = (offset.uncheckedAdd(limit)).min(set.length()).max(offset);
 
-        eventList = new address[](to.uncheckedSub(offset));
+        list = new address[](to.uncheckedSub(offset));
 
         for (uint256 i = offset; i < to; i++) {
             uint256 index = i.uncheckedSub(offset);
-            eventList[index] = set.at(i);
+            list[index] = set.at(i);
         }
     }
 
     // ==================
     // ||   SETTINGS   ||
     // ==================
+
+    function setTokenAddress(address newTokenAddress) external onlyRole(ADMIN_ROLE) {
+        tokenAddress = newTokenAddress;
+    }
 
     function enableBet(address eventAddress) external onlyRole(ADMIN_ROLE) {
         if (_stopBets[eventAddress] != 0) {
@@ -129,7 +136,7 @@ contract EventRegistry is IEventRegistry, AccessControlUpgradeable {
     // ================
 
     function createEvent() external onlyRole(ADMIN_ROLE) {
-        Event eventContract = new Event();
+        Event eventContract = new Event(tokenAddress);
         address eventAddress = address(eventContract);
 
         _eventAddresses.add(eventAddress);
@@ -138,8 +145,8 @@ contract EventRegistry is IEventRegistry, AccessControlUpgradeable {
         emit EventCreated(eventAddress);
     }
 
-    function endEvent(address eventAddress) external onlyRole(ADMIN_ROLE) {
-        Event(eventAddress).endEvent();
+    function endEvent(address eventAddress, Event.Result result) external onlyRole(ADMIN_ROLE) {
+        Event(eventAddress).endEvent(result);
         _closeEvent(eventAddress);
 
         emit EventEnded(eventAddress);

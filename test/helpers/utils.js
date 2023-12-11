@@ -1,10 +1,7 @@
 const { time } = require('@openzeppelin/test-helpers');
-const { ZERO_ADDRESS } = require('@openzeppelin/test-helpers/src/constants.js');
 const { takeSnapshot } = require('@nomicfoundation/hardhat-network-helpers');
 const BigNumber = require('bignumber.js');
 const { toWei } = web3.utils;
-
-const ADMIN_ROLE = web3.utils.soliditySha3('ADMIN_ROLE');
 
 let _snapshot;
 async function snapshot() {
@@ -55,9 +52,7 @@ async function increaseTimeTo(target) {
 }
 
 module.exports = {
-  ZERO_ADDRESS,
   toWei,
-  ADMIN_ROLE,
   snapshot,
   restore,
   toBN,

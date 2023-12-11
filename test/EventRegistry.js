@@ -1,18 +1,12 @@
 const { expect } = require('chai');
 const { init } = require('./helpers/init.js');
-const {
-  snapshot,
-  restore,
-  ADMIN_ROLE,
-  getCurrentBlockTimestamp,
-  toBN,
-  increaseTime,
-  getCosts,
-} = require('./helpers/utils.js');
+const { snapshot, restore, getCurrentBlockTimestamp, toBN, increaseTime, getCosts } = require('./helpers/utils.js');
+const { ADMIN_ROLE, ZERO_ADDRESS, RESULT } = require('./helpers/constants.js');
 
 describe('EventRegistry', async () => {
   const args = process.env;
 
+  let usdt, usdtAddress;
   let eventRegistry, eventRegistryAddress;
 
   let eventAddress;
@@ -33,6 +27,9 @@ describe('EventRegistry', async () => {
     user2 = setups.users[2];
     user3 = setups.users[3];
     admin = setups.users[4];
+
+    usdt = setups.usdt;
+    usdtAddress = await usdt.getAddress();
 
     eventRegistry = setups.eventRegistry;
     eventRegistryAddress = await eventRegistry.getAddress();
@@ -69,8 +66,19 @@ describe('EventRegistry', async () => {
       receipt = await tx.wait();
       eventAddress2 = receipt.logs[0].args[0];
     });
+    describe('setTokenAddress', async () => {
+      it('set usdt token by default', async () => {
+        expect(await eventRegistry.tokenAddress()).to.equal(usdtAddress);
+      });
+      it('set commission percentage by admin', async () => {
+        const newTokenAddress = ZERO_ADDRESS;
+
+        await eventRegistry.connect(admin).setTokenAddress(newTokenAddress);
+        expect(await eventRegistry.tokenAddress()).to.equal(newTokenAddress);
+      });
+    });
     describe('enableBet', async () => {
-      it('is enabled by default', async () => {
+      it('enabled by default', async () => {
         expect(await eventRegistry.stopBets(eventAddress1)).to.equal(0);
         expect(await eventRegistry.stopBets(eventAddress1)).to.equal(0);
       });
@@ -175,10 +183,10 @@ describe('EventRegistry', async () => {
       });
     });
     describe('setCommissionPercentage', async () => {
-      it('sets 10% commission percentage by default', async () => {
+      it('set 10% commission percentage by default', async () => {
         expect(await eventRegistry.commissionPercentage()).to.equal(10);
       });
-      it('sets commission percentage by admin', async () => {
+      it('set commission percentage by admin', async () => {
         const newCommissionPercentage = 25;
 
         await eventRegistry.connect(admin).setCommissionPercentage(newCommissionPercentage);
@@ -296,7 +304,7 @@ describe('EventRegistry', async () => {
       expect(listOpenEvents[0]).to.equal(eventAddress1);
       expect(listOpenEvents[1]).to.equal(eventAddress2);
     });
-    it('deploys new Event contract', async () => {
+    it('deploy new Event contract', async () => {
       const Event = await ethers.getContractFactory('EventMock');
 
       let tx = await eventRegistry.connect(admin).createEvent();
@@ -306,7 +314,7 @@ describe('EventRegistry', async () => {
 
       expect(await event.eventRegistry()).to.equal(eventRegistryAddress);
     });
-    it('emits EventCreated event', async () => {
+    it('emit EventCreated event', async () => {
       await expect(eventRegistry.connect(admin).createEvent()).to.emit(eventRegistry, 'EventCreated');
     });
   });
@@ -314,17 +322,24 @@ describe('EventRegistry', async () => {
   describe('cancelEvent', async () => {});
   describe('gas cost', async () => {
     let tx;
-
     it('createEvent', async () => {
       tx = await eventRegistry.connect(admin).createEvent();
       await getCosts(tx);
     });
-    it('endEvent', async () => {
+    it('endEvent - not draw', async () => {
       tx = await eventRegistry.connect(admin).createEvent();
       receipt = await tx.wait();
       eventAddress = receipt.logs[0].args[0];
 
-      tx = await eventRegistry.connect(admin).endEvent(eventAddress);
+      tx = await eventRegistry.connect(admin).endEvent(eventAddress, RESULT.WIN_A);
+      await getCosts(tx);
+    });
+    it('endEvent - draw', async () => {
+      tx = await eventRegistry.connect(admin).createEvent();
+      receipt = await tx.wait();
+      eventAddress = receipt.logs[0].args[0];
+
+      tx = await eventRegistry.connect(admin).endEvent(eventAddress, RESULT.DRAW);
       await getCosts(tx);
     });
     it('cancelEvent', async () => {

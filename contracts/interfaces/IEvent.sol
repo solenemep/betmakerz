@@ -1,19 +1,22 @@
 //SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.20;
 
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+
 interface IEvent {
     enum Team {
         TEAM_A,
         TEAM_B
     }
 
-    struct BetInfo {
-        Team team;
-        uint256 betAmount;
+    enum Result {
+        DRAW,
+        WIN_A,
+        WIN_B
     }
 
     struct PoolInfo {
+        EnumerableSet.AddressSet bettorAddresses;
         uint256 treasury;
-        uint256 bettors;
     }
 }
