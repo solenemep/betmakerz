@@ -5,5 +5,5 @@ module.exports = {
     TEAM_A: 0,
     TEAM_B: 1,
   },
-  RESULT: { DRAW: 0, WIN_A: 1, WIN_B: 2 },
+  RESULT: { NO_WIN: 0, WIN_A: 1, WIN_B: 2 },
 };

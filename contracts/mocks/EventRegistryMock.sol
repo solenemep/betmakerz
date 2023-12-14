@@ -7,8 +7,6 @@ import "@openzeppelin/contracts/utils/math/Math.sol";
 
 import "../EventRegistry.sol";
 
-import "./EventMock.sol";
-
 /// @author @solenemep
 /// @title EventRegistryMock
 /// @notice Registers all event addresses

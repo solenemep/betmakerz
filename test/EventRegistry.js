@@ -305,14 +305,14 @@ describe('EventRegistry', async () => {
       expect(listOpenEvents[1]).to.equal(eventAddress2);
     });
     it('deploy new Event contract', async () => {
-      const Event = await ethers.getContractFactory('EventMock');
+      const Event = await ethers.getContractFactory('Event');
 
       let tx = await eventRegistry.connect(admin).createEvent();
       let receipt = await tx.wait();
       const eventAddress = receipt.logs[0].args[0];
       const event = Event.attach(eventAddress);
 
-      expect(await event.eventRegistry()).to.equal(eventRegistryAddress);
+      expect(await event.eventRegistryAddress()).to.equal(eventRegistryAddress);
     });
     it('emit EventCreated event', async () => {
       await expect(eventRegistry.connect(admin).createEvent()).to.emit(eventRegistry, 'EventCreated');
@@ -326,7 +326,7 @@ describe('EventRegistry', async () => {
       tx = await eventRegistry.connect(admin).createEvent();
       await getCosts(tx);
     });
-    it('endEvent - not draw', async () => {
+    it('endEvent - not NO_WIN', async () => {
       tx = await eventRegistry.connect(admin).createEvent();
       receipt = await tx.wait();
       eventAddress = receipt.logs[0].args[0];
@@ -334,12 +334,12 @@ describe('EventRegistry', async () => {
       tx = await eventRegistry.connect(admin).endEvent(eventAddress, RESULT.WIN_A);
       await getCosts(tx);
     });
-    it('endEvent - draw', async () => {
+    it('endEvent - NO_WIN', async () => {
       tx = await eventRegistry.connect(admin).createEvent();
       receipt = await tx.wait();
       eventAddress = receipt.logs[0].args[0];
 
-      tx = await eventRegistry.connect(admin).endEvent(eventAddress, RESULT.DRAW);
+      tx = await eventRegistry.connect(admin).endEvent(eventAddress, RESULT.NO_WIN);
       await getCosts(tx);
     });
     it('cancelEvent', async () => {

@@ -3,9 +3,9 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import "@openzeppelin/contracts/utils/math/Math.sol";
 
 import "./libraries/UncheckedMath.sol";
+import "./libraries/Listing.sol";
 
 import "./interfaces/IEventRegistry.sol";
 
@@ -18,8 +18,6 @@ import "./Event.sol";
 
 contract EventRegistry is IEventRegistry, AccessControlUpgradeable {
     using EnumerableSet for EnumerableSet.AddressSet;
-    using UncheckedMath for uint256;
-    using Math for uint256;
 
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
 
@@ -29,7 +27,7 @@ contract EventRegistry is IEventRegistry, AccessControlUpgradeable {
     EnumerableSet.AddressSet internal _openEventAddresses;
     mapping(address => uint256) internal _stopBets;
 
-    uint256 public commissionPercentage;
+    uint256 public override commissionPercentage;
 
     event EventCreated(address indexed eventAddress);
     event EventEnded(address indexed eventAddress);
@@ -52,59 +50,52 @@ contract EventRegistry is IEventRegistry, AccessControlUpgradeable {
     // ||   LISTING   ||
     // =================
 
+    // TODO natspec
     function countEvents() external view returns (uint256) {
         return _eventAddresses.length();
     }
 
+    // TODO natspec
     function countOpenEvents() external view returns (uint256) {
         return _openEventAddresses.length();
     }
 
+    // TODO natspec
     /// @notice use with countEvents()
     function listEvents(uint256 offset, uint256 limit) external view returns (address[] memory eventList) {
-        return _list(offset, limit, _eventAddresses);
+        return Listing.listAdd(offset, limit, _eventAddresses);
     }
 
+    // TODO natspec
     /// @notice use with countOpenEvents()
     function listOpenEvents(uint256 offset, uint256 limit) external view returns (address[] memory eventList) {
-        return _list(offset, limit, _openEventAddresses);
-    }
-
-    function _list(
-        uint256 offset,
-        uint256 limit,
-        EnumerableSet.AddressSet storage set
-    ) internal view returns (address[] memory list) {
-        uint256 to = (offset.uncheckedAdd(limit)).min(set.length()).max(offset);
-
-        list = new address[](to.uncheckedSub(offset));
-
-        for (uint256 i = offset; i < to; i++) {
-            uint256 index = i.uncheckedSub(offset);
-            list[index] = set.at(i);
-        }
+        return Listing.listAdd(offset, limit, _openEventAddresses);
     }
 
     // ==================
     // ||   SETTINGS   ||
     // ==================
 
+    // TODO natspec
     function setTokenAddress(address newTokenAddress) external onlyRole(ADMIN_ROLE) {
         tokenAddress = newTokenAddress;
     }
 
+    // TODO natspec
     function enableBet(address eventAddress) external onlyRole(ADMIN_ROLE) {
         if (_stopBets[eventAddress] != 0) {
             _betAllowance(eventAddress, 0);
         }
     }
 
+    // TODO natspec
     function disableBet(address eventAddress) external onlyRole(ADMIN_ROLE) {
         if (_stopBets[eventAddress] == 0 || block.timestamp <= _stopBets[eventAddress]) {
             _betAllowance(eventAddress, block.timestamp);
         }
     }
 
+    // TODO natspec
     function disableBetAtDate(address eventAddress, uint256 stopBets) external onlyRole(ADMIN_ROLE) {
         if (
             block.timestamp <= stopBets && (_stopBets[eventAddress] == 0 || block.timestamp <= _stopBets[eventAddress])
@@ -117,6 +108,7 @@ contract EventRegistry is IEventRegistry, AccessControlUpgradeable {
         _stopBets[eventAddress] = stopBets;
     }
 
+    // TODO natspec
     function setCommissionPercentage(uint256 newCommissionPercentage) external onlyRole(ADMIN_ROLE) {
         commissionPercentage = newCommissionPercentage;
     }
@@ -125,6 +117,7 @@ contract EventRegistry is IEventRegistry, AccessControlUpgradeable {
     // ||   STATUS   ||
     // ================
 
+    // TODO natspec
     function canBet(address eventAddress) public view override returns (bool) {
         if (_stopBets[eventAddress] == 0 || block.timestamp < _stopBets[eventAddress]) {
             return true;
@@ -135,8 +128,9 @@ contract EventRegistry is IEventRegistry, AccessControlUpgradeable {
     // ||   EVENTS   ||
     // ================
 
+    // TODO natspec
     function createEvent() external onlyRole(ADMIN_ROLE) {
-        Event eventContract = new Event(tokenAddress);
+        Event eventContract = new Event(tokenAddress, commissionPercentage);
         address eventAddress = address(eventContract);
 
         _eventAddresses.add(eventAddress);
@@ -145,15 +139,17 @@ contract EventRegistry is IEventRegistry, AccessControlUpgradeable {
         emit EventCreated(eventAddress);
     }
 
-    function endEvent(address eventAddress, Event.Result result) external onlyRole(ADMIN_ROLE) {
-        Event(eventAddress).endEvent(result);
+    // TODO natspec
+    function endEvent(address eventAddress, Result result) external onlyRole(ADMIN_ROLE) {
+        Event(eventAddress).closeEvent(result);
         _closeEvent(eventAddress);
 
         emit EventEnded(eventAddress);
     }
 
+    // TODO natspec
     function cancelEvent(address eventAddress) external onlyRole(ADMIN_ROLE) {
-        Event(eventAddress).cancelEvent();
+        Event(eventAddress).closeEvent(Result.NO_WIN);
         _closeEvent(eventAddress);
 
         emit EventCanceled(eventAddress);

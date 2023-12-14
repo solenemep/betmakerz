@@ -9,12 +9,6 @@ interface IEvent {
         TEAM_B
     }
 
-    enum Result {
-        DRAW,
-        WIN_A,
-        WIN_B
-    }
-
     struct PoolInfo {
         EnumerableSet.AddressSet bettorAddresses;
         uint256 treasury;
