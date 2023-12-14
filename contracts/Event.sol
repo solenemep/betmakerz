@@ -39,6 +39,8 @@ contract Event is IEvent {
     event BetPlaced(Team indexed team, address indexed bettor, uint256 indexed tokenAmount, uint256 partnerID);
     event BetRefunded(Team indexed team, address indexed bettor, uint256 indexed tokenAmount);
     event BetRewarded(Team indexed team, address indexed bettor, uint256 indexed tokenAmount);
+    event CommissionPaid(uint256 indexed tokenAmount);
+    event LooserPoolTransfered(uint256 indexed tokenAmount);
 
     modifier onlyEventRegistry() {
         if (msg.sender != eventRegistryAddress) {
@@ -134,9 +136,14 @@ contract Event is IEvent {
             _refundTeam(winnerTeam, _poolInfo[winnerTeam].bettorAddresses.length());
         } else if (_poolInfo[winnerTeam].treasury == 0 && _poolInfo[looserTeam].treasury != 0) {
             token.transfer(address(eventRegistryAddress), _poolInfo[looserTeam].treasury);
+
+            emit LooserPoolTransfered(_poolInfo[looserTeam].treasury);
         } else if (_poolInfo[winnerTeam].treasury != 0 && _poolInfo[looserTeam].treasury != 0) {
             uint256 commission = (_poolInfo[looserTeam].treasury * commissionPercentage).uncheckedDiv(100);
             token.transfer(address(eventRegistryAddress), commission);
+
+            emit CommissionPaid(commission);
+
             _rewardTeam(winnerTeam, looserTeam, _poolInfo[winnerTeam].bettorAddresses.length());
         }
     }

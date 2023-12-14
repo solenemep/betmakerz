@@ -9,9 +9,9 @@ describe('EventRegistry', async () => {
   let usdt, usdtAddress;
   let eventRegistry, eventRegistryAddress;
 
-  let eventAddress;
-  let eventAddress1;
-  let eventAddress2;
+  let event, eventAddress;
+  let event1, eventAddress1;
+  let event2, eventAddress2;
 
   let owner;
   let user1, user2, user3;
@@ -60,11 +60,7 @@ describe('EventRegistry', async () => {
       // create events
       let tx = await eventRegistry.connect(admin).createEvent();
       let receipt = await tx.wait();
-      eventAddress1 = receipt.logs[0].args[0];
-
-      tx = await eventRegistry.connect(admin).createEvent();
-      receipt = await tx.wait();
-      eventAddress2 = receipt.logs[0].args[0];
+      eventAddress = receipt.logs[0].args[0];
     });
     describe('setTokenAddress', async () => {
       it('set usdt token by default', async () => {
@@ -75,111 +71,6 @@ describe('EventRegistry', async () => {
 
         await eventRegistry.connect(admin).setTokenAddress(newTokenAddress);
         expect(await eventRegistry.tokenAddress()).to.equal(newTokenAddress);
-      });
-    });
-    describe('enableBet', async () => {
-      it('enabled by default', async () => {
-        expect(await eventRegistry.stopBets(eventAddress1)).to.equal(0);
-        expect(await eventRegistry.stopBets(eventAddress1)).to.equal(0);
-      });
-      it('do nothing if enabled', async () => {
-        expect(await eventRegistry.stopBets(eventAddress1)).to.equal(0);
-
-        await eventRegistry.connect(admin).enableBet(eventAddress1);
-        expect(await eventRegistry.stopBets(eventAddress1)).to.equal(0);
-      });
-      it('enable bet if disabled', async () => {
-        await eventRegistry.connect(admin).disableBet(eventAddress1);
-        timestamp = await getCurrentBlockTimestamp();
-        expect(await eventRegistry.stopBets(eventAddress1)).to.equal(timestamp);
-
-        await eventRegistry.connect(admin).enableBet(eventAddress1);
-        expect(await eventRegistry.stopBets(eventAddress1)).to.equal(0);
-      });
-    });
-    describe('disableBet', async () => {
-      it('disable bet if enabled', async () => {
-        expect(await eventRegistry.stopBets(eventAddress1)).to.equal(0);
-
-        await eventRegistry.connect(admin).disableBet(eventAddress1);
-        timestamp = await getCurrentBlockTimestamp();
-        expect(await eventRegistry.stopBets(eventAddress1)).to.equal(timestamp);
-      });
-      it('disable bet if enabled until future date', async () => {
-        const stopBets = toBN(await getCurrentBlockTimestamp())
-          .plus(8 * 24 * 60 * 60)
-          .toString();
-        await eventRegistry.connect(admin).disableBetAtDate(eventAddress1, stopBets);
-        expect(await eventRegistry.stopBets(eventAddress1)).to.equal(stopBets);
-
-        await eventRegistry.connect(admin).disableBet(eventAddress1);
-        timestamp = await getCurrentBlockTimestamp();
-        expect(await eventRegistry.stopBets(eventAddress1)).to.equal(timestamp);
-      });
-      it('do nothing if disabled in past', async () => {
-        await eventRegistry.connect(admin).disableBet(eventAddress1);
-        timestamp = await getCurrentBlockTimestamp();
-        expect(await eventRegistry.stopBets(eventAddress1)).to.equal(timestamp);
-
-        await increaseTime(2 * 24 * 60 * 60);
-        await eventRegistry.connect(admin).disableBet(eventAddress1);
-        expect(await eventRegistry.stopBets(eventAddress1)).to.equal(timestamp);
-      });
-    });
-    describe('disableBetAtDate', async () => {
-      it('do nothing if date is in past', async () => {
-        const stopBets = await getCurrentBlockTimestamp();
-        await increaseTime(2 * 24 * 60 * 60);
-
-        await eventRegistry.connect(admin).disableBetAtDate(eventAddress1, stopBets);
-        expect(await eventRegistry.stopBets(eventAddress1)).to.equal(0);
-      });
-      it('disable bet at date if enabled', async () => {
-        expect(await eventRegistry.stopBets(eventAddress1)).to.equal(0);
-
-        const stopBets = toBN(await getCurrentBlockTimestamp())
-          .plus(8 * 24 * 60 * 60)
-          .toString();
-        await eventRegistry.connect(admin).disableBetAtDate(eventAddress1, stopBets);
-        expect(await eventRegistry.stopBets(eventAddress1)).to.equal(stopBets);
-      });
-      it('disable bet at date if enabled until future date - new date < ex date', async () => {
-        const stopBets1 = toBN(await getCurrentBlockTimestamp())
-          .plus(8 * 24 * 60 * 60)
-          .toString();
-        await eventRegistry.connect(admin).disableBetAtDate(eventAddress1, stopBets1);
-        expect(await eventRegistry.stopBets(eventAddress1)).to.equal(stopBets1);
-
-        const stopBets2 = toBN(await getCurrentBlockTimestamp())
-          .plus(3 * 24 * 60 * 60)
-          .toString();
-        await eventRegistry.connect(admin).disableBetAtDate(eventAddress1, stopBets2);
-        expect(await eventRegistry.stopBets(eventAddress1)).to.equal(stopBets2);
-      });
-      it('disable bet at date if enabled until future date - new date > ex date', async () => {
-        const stopBets1 = toBN(await getCurrentBlockTimestamp())
-          .plus(2 * 24 * 60 * 60)
-          .toString();
-        await eventRegistry.connect(admin).disableBetAtDate(eventAddress1, stopBets1);
-        expect(await eventRegistry.stopBets(eventAddress1)).to.equal(stopBets1);
-
-        const stopBets2 = toBN(await getCurrentBlockTimestamp())
-          .plus(7 * 24 * 60 * 60)
-          .toString();
-        await eventRegistry.connect(admin).disableBetAtDate(eventAddress1, stopBets2);
-        expect(await eventRegistry.stopBets(eventAddress1)).to.equal(stopBets2);
-      });
-      it('do nothing if disabled in past', async () => {
-        await eventRegistry.connect(admin).disableBet(eventAddress1);
-        timestamp = await getCurrentBlockTimestamp();
-        expect(await eventRegistry.stopBets(eventAddress1)).to.equal(timestamp);
-
-        await increaseTime(2 * 24 * 60 * 60);
-        const stopBets = toBN(await getCurrentBlockTimestamp())
-          .plus(3 * 24 * 60 * 60)
-          .toString();
-        await eventRegistry.connect(admin).disableBetAtDate(eventAddress1, stopBets);
-        expect(await eventRegistry.stopBets(eventAddress1)).to.equal(timestamp);
       });
     });
     describe('setCommissionPercentage', async () => {
@@ -193,46 +84,156 @@ describe('EventRegistry', async () => {
         expect(await eventRegistry.commissionPercentage()).to.equal(newCommissionPercentage);
       });
     });
+    describe('enableBet', async () => {
+      it('enabled by default', async () => {
+        expect(await eventRegistry.stopBets(eventAddress)).to.equal(0);
+        expect(await eventRegistry.stopBets(eventAddress)).to.equal(0);
+      });
+      it('do nothing if enabled', async () => {
+        expect(await eventRegistry.stopBets(eventAddress)).to.equal(0);
+
+        await eventRegistry.connect(admin).enableBet(eventAddress);
+        expect(await eventRegistry.stopBets(eventAddress)).to.equal(0);
+      });
+      it('enable bet if disabled', async () => {
+        await eventRegistry.connect(admin).disableBet(eventAddress);
+        timestamp = await getCurrentBlockTimestamp();
+        expect(await eventRegistry.stopBets(eventAddress)).to.equal(timestamp);
+
+        await eventRegistry.connect(admin).enableBet(eventAddress);
+        expect(await eventRegistry.stopBets(eventAddress)).to.equal(0);
+      });
+    });
+    describe('disableBet', async () => {
+      it('disable bet if enabled', async () => {
+        expect(await eventRegistry.stopBets(eventAddress)).to.equal(0);
+
+        await eventRegistry.connect(admin).disableBet(eventAddress);
+        timestamp = await getCurrentBlockTimestamp();
+        expect(await eventRegistry.stopBets(eventAddress)).to.equal(timestamp);
+      });
+      it('disable bet if enabled until future date', async () => {
+        const stopBets = toBN(await getCurrentBlockTimestamp())
+          .plus(8 * 24 * 60 * 60)
+          .toString();
+        await eventRegistry.connect(admin).disableBetAtDate(eventAddress, stopBets);
+        expect(await eventRegistry.stopBets(eventAddress)).to.equal(stopBets);
+
+        await eventRegistry.connect(admin).disableBet(eventAddress);
+        timestamp = await getCurrentBlockTimestamp();
+        expect(await eventRegistry.stopBets(eventAddress)).to.equal(timestamp);
+      });
+      it('do nothing if disabled in past', async () => {
+        await eventRegistry.connect(admin).disableBet(eventAddress);
+        timestamp = await getCurrentBlockTimestamp();
+        expect(await eventRegistry.stopBets(eventAddress)).to.equal(timestamp);
+
+        await increaseTime(2 * 24 * 60 * 60);
+        await eventRegistry.connect(admin).disableBet(eventAddress);
+        expect(await eventRegistry.stopBets(eventAddress)).to.equal(timestamp);
+      });
+    });
+    describe('disableBetAtDate', async () => {
+      it('do nothing if date is in past', async () => {
+        const stopBets = await getCurrentBlockTimestamp();
+        await increaseTime(2 * 24 * 60 * 60);
+
+        await eventRegistry.connect(admin).disableBetAtDate(eventAddress, stopBets);
+        expect(await eventRegistry.stopBets(eventAddress)).to.equal(0);
+      });
+      it('disable bet at date if enabled', async () => {
+        expect(await eventRegistry.stopBets(eventAddress)).to.equal(0);
+
+        const stopBets = toBN(await getCurrentBlockTimestamp())
+          .plus(8 * 24 * 60 * 60)
+          .toString();
+        await eventRegistry.connect(admin).disableBetAtDate(eventAddress, stopBets);
+        expect(await eventRegistry.stopBets(eventAddress)).to.equal(stopBets);
+      });
+      it('disable bet at date if enabled until future date - new date < ex date', async () => {
+        const stopBets1 = toBN(await getCurrentBlockTimestamp())
+          .plus(8 * 24 * 60 * 60)
+          .toString();
+        await eventRegistry.connect(admin).disableBetAtDate(eventAddress, stopBets1);
+        expect(await eventRegistry.stopBets(eventAddress)).to.equal(stopBets1);
+
+        const stopBets2 = toBN(await getCurrentBlockTimestamp())
+          .plus(3 * 24 * 60 * 60)
+          .toString();
+        await eventRegistry.connect(admin).disableBetAtDate(eventAddress, stopBets2);
+        expect(await eventRegistry.stopBets(eventAddress)).to.equal(stopBets2);
+      });
+      it('disable bet at date if enabled until future date - new date > ex date', async () => {
+        const stopBets1 = toBN(await getCurrentBlockTimestamp())
+          .plus(2 * 24 * 60 * 60)
+          .toString();
+        await eventRegistry.connect(admin).disableBetAtDate(eventAddress, stopBets1);
+        expect(await eventRegistry.stopBets(eventAddress)).to.equal(stopBets1);
+
+        const stopBets2 = toBN(await getCurrentBlockTimestamp())
+          .plus(7 * 24 * 60 * 60)
+          .toString();
+        await eventRegistry.connect(admin).disableBetAtDate(eventAddress, stopBets2);
+        expect(await eventRegistry.stopBets(eventAddress)).to.equal(stopBets2);
+      });
+      it('do nothing if disabled in past', async () => {
+        await eventRegistry.connect(admin).disableBet(eventAddress);
+        timestamp = await getCurrentBlockTimestamp();
+        expect(await eventRegistry.stopBets(eventAddress)).to.equal(timestamp);
+
+        await increaseTime(2 * 24 * 60 * 60);
+        const stopBets = toBN(await getCurrentBlockTimestamp())
+          .plus(3 * 24 * 60 * 60)
+          .toString();
+        await eventRegistry.connect(admin).disableBetAtDate(eventAddress, stopBets);
+        expect(await eventRegistry.stopBets(eventAddress)).to.equal(timestamp);
+      });
+    });
   });
-  describe('status', async () => {
+  describe('canBet', async () => {
     beforeEach('setup', async () => {
-      // create events
       let tx = await eventRegistry.connect(admin).createEvent();
       let receipt = await tx.wait();
-      eventAddress1 = receipt.logs[0].args[0];
-
-      tx = await eventRegistry.connect(admin).createEvent();
-      receipt = await tx.wait();
-      eventAddress2 = receipt.logs[0].args[0];
+      eventAddress = receipt.logs[0].args[0];
     });
     it('can bet by default', async () => {
-      expect(await eventRegistry.canBet(eventAddress1)).to.equal(true);
+      expect(await eventRegistry.canBet(eventAddress)).to.equal(true);
     });
     it('cannot bet if disabled', async () => {
-      await eventRegistry.connect(admin).disableBet(eventAddress1);
+      await eventRegistry.connect(admin).disableBet(eventAddress);
       timestamp = await getCurrentBlockTimestamp();
-      expect(await eventRegistry.stopBets(eventAddress1)).to.equal(timestamp);
+      expect(await eventRegistry.stopBets(eventAddress)).to.equal(timestamp);
 
-      expect(await eventRegistry.canBet(eventAddress1)).to.equal(false);
+      expect(await eventRegistry.canBet(eventAddress)).to.equal(false);
     });
     it('can bet if disabled in future', async () => {
       const stopBets = toBN(await getCurrentBlockTimestamp())
         .plus(2 * 24 * 60 * 60)
         .toString();
-      await eventRegistry.connect(admin).disableBetAtDate(eventAddress1, stopBets);
-      expect(await eventRegistry.stopBets(eventAddress1)).to.equal(stopBets);
+      await eventRegistry.connect(admin).disableBetAtDate(eventAddress, stopBets);
+      expect(await eventRegistry.stopBets(eventAddress)).to.equal(stopBets);
 
-      expect(await eventRegistry.canBet(eventAddress1)).to.equal(true);
+      expect(await eventRegistry.canBet(eventAddress)).to.equal(true);
     });
     it('can bet if enabled by admin', async () => {
       const stopBets = toBN(await getCurrentBlockTimestamp())
         .plus(2 * 24 * 60 * 60)
         .toString();
-      await eventRegistry.connect(admin).disableBetAtDate(eventAddress1, stopBets);
-      expect(await eventRegistry.stopBets(eventAddress1)).to.equal(stopBets);
+      await eventRegistry.connect(admin).disableBetAtDate(eventAddress, stopBets);
+      expect(await eventRegistry.stopBets(eventAddress)).to.equal(stopBets);
 
-      await eventRegistry.connect(admin).enableBet(eventAddress1);
-      expect(await eventRegistry.canBet(eventAddress1)).to.equal(true);
+      await eventRegistry.connect(admin).enableBet(eventAddress);
+      expect(await eventRegistry.canBet(eventAddress)).to.equal(true);
+    });
+    it('cannot bet if ended', async () => {
+      await eventRegistry.connect(admin).endEvent(eventAddress, RESULT.WIN_A);
+
+      expect(await eventRegistry.canBet(eventAddress)).to.equal(false);
+    });
+    it('cannot bet if canceled', async () => {
+      await eventRegistry.connect(admin).cancelEvent(eventAddress);
+
+      expect(await eventRegistry.canBet(eventAddress)).to.equal(false);
     });
   });
   describe('createEvent', async () => {
@@ -251,7 +252,7 @@ describe('EventRegistry', async () => {
 
       let tx = await eventRegistry.connect(admin).createEvent();
       let receipt = await tx.wait();
-      const eventAddress = receipt.logs[0].args[0];
+      eventAddress = receipt.logs[0].args[0];
 
       countEvents = await eventRegistry.countEvents();
       expect(countEvents).to.equal(1);
@@ -282,11 +283,11 @@ describe('EventRegistry', async () => {
 
       let tx = await eventRegistry.connect(admin).createEvent();
       let receipt = await tx.wait();
-      const eventAddress1 = receipt.logs[0].args[0];
+      eventAddress1 = receipt.logs[0].args[0];
 
       tx = await eventRegistry.connect(admin).createEvent();
       receipt = await tx.wait();
-      const eventAddress2 = receipt.logs[0].args[0];
+      eventAddress2 = receipt.logs[0].args[0];
 
       countEvents = await eventRegistry.countEvents();
       expect(countEvents).to.equal(2);
@@ -309,8 +310,8 @@ describe('EventRegistry', async () => {
 
       let tx = await eventRegistry.connect(admin).createEvent();
       let receipt = await tx.wait();
-      const eventAddress = receipt.logs[0].args[0];
-      const event = Event.attach(eventAddress);
+      eventAddress = receipt.logs[0].args[0];
+      event = Event.attach(eventAddress);
 
       expect(await event.eventRegistryAddress()).to.equal(eventRegistryAddress);
     });
@@ -318,20 +319,144 @@ describe('EventRegistry', async () => {
       await expect(eventRegistry.connect(admin).createEvent()).to.emit(eventRegistry, 'EventCreated');
     });
   });
-  describe('endEvent', async () => {});
-  describe('cancelEvent', async () => {});
+  describe('cancelEvent', async () => {
+    beforeEach('setup', async () => {
+      const Event = await ethers.getContractFactory('Event');
+
+      let tx = await eventRegistry.connect(admin).createEvent();
+      let receipt = await tx.wait();
+      eventAddress = receipt.logs[0].args[0];
+      event = Event.attach(eventAddress);
+    });
+    it('cancel event successfully', async () => {
+      let countEvents = await eventRegistry.countEvents();
+      expect(countEvents).to.equal(1);
+
+      let listEvents = await eventRegistry.listEvents(0, countEvents);
+      expect(listEvents.length).to.equal(1);
+      expect(listEvents[0]).to.equal(eventAddress);
+
+      let countOpenEvents = await eventRegistry.countOpenEvents();
+      expect(countOpenEvents).to.equal(1);
+
+      let listOpenEvents = await eventRegistry.listOpenEvents(0, countOpenEvents);
+      expect(listOpenEvents.length).to.equal(1);
+      expect(listOpenEvents[0]).to.equal(eventAddress);
+
+      await eventRegistry.connect(admin).cancelEvent(eventAddress);
+
+      countEvents = await eventRegistry.countEvents();
+      expect(countEvents).to.equal(1);
+
+      listEvents = await eventRegistry.listEvents(0, countEvents);
+      expect(listEvents.length).to.equal(1);
+      expect(listEvents[0]).to.equal(eventAddress);
+
+      countOpenEvents = await eventRegistry.countOpenEvents();
+      expect(countOpenEvents).to.equal(0);
+
+      listOpenEvents = await eventRegistry.listOpenEvents(0, countOpenEvents);
+      expect(listOpenEvents.length).to.equal(0);
+    });
+    it('revert if already closed - ended', async () => {
+      const reason = 'AlreadyClosed';
+
+      await eventRegistry.connect(admin).endEvent(eventAddress, RESULT.WIN_A);
+      await expect(eventRegistry.connect(admin).cancelEvent(eventAddress)).to.be.revertedWithCustomError(
+        eventRegistry,
+        reason,
+      );
+    });
+    it('revert if already closed - canceled', async () => {
+      const reason = 'AlreadyClosed';
+
+      await eventRegistry.connect(admin).cancelEvent(eventAddress);
+      await expect(eventRegistry.connect(admin).cancelEvent(eventAddress)).to.be.revertedWithCustomError(
+        eventRegistry,
+        reason,
+      );
+    });
+    it('emit EventCanceled event', async () => {
+      await expect(eventRegistry.connect(admin).cancelEvent(eventAddress))
+        .to.emit(eventRegistry, 'EventCanceled')
+        .withArgs(eventAddress);
+    });
+  });
+  describe('endEvent', async () => {
+    beforeEach('setup', async () => {
+      const Event = await ethers.getContractFactory('Event');
+
+      let tx = await eventRegistry.connect(admin).createEvent();
+      let receipt = await tx.wait();
+      eventAddress = receipt.logs[0].args[0];
+      event = Event.attach(eventAddress);
+    });
+    it('end event successfully', async () => {
+      let countEvents = await eventRegistry.countEvents();
+      expect(countEvents).to.equal(1);
+
+      let listEvents = await eventRegistry.listEvents(0, countEvents);
+      expect(listEvents.length).to.equal(1);
+      expect(listEvents[0]).to.equal(eventAddress);
+
+      let countOpenEvents = await eventRegistry.countOpenEvents();
+      expect(countOpenEvents).to.equal(1);
+
+      let listOpenEvents = await eventRegistry.listOpenEvents(0, countOpenEvents);
+      expect(listOpenEvents.length).to.equal(1);
+      expect(listOpenEvents[0]).to.equal(eventAddress);
+
+      await eventRegistry.connect(admin).endEvent(eventAddress, RESULT.WIN_A);
+
+      countEvents = await eventRegistry.countEvents();
+      expect(countEvents).to.equal(1);
+
+      listEvents = await eventRegistry.listEvents(0, countEvents);
+      expect(listEvents.length).to.equal(1);
+      expect(listEvents[0]).to.equal(eventAddress);
+
+      countOpenEvents = await eventRegistry.countOpenEvents();
+      expect(countOpenEvents).to.equal(0);
+
+      listOpenEvents = await eventRegistry.listOpenEvents(0, countOpenEvents);
+      expect(listOpenEvents.length).to.equal(0);
+    });
+    it('revert if already closed - ended', async () => {
+      const reason = 'AlreadyClosed';
+
+      await eventRegistry.connect(admin).endEvent(eventAddress, RESULT.WIN_A);
+      await expect(eventRegistry.connect(admin).endEvent(eventAddress, RESULT.WIN_A)).to.be.revertedWithCustomError(
+        eventRegistry,
+        reason,
+      );
+    });
+    it('revert if already closed - canceled', async () => {
+      const reason = 'AlreadyClosed';
+
+      await eventRegistry.connect(admin).cancelEvent(eventAddress);
+      await expect(eventRegistry.connect(admin).endEvent(eventAddress, RESULT.WIN_A)).to.be.revertedWithCustomError(
+        eventRegistry,
+        reason,
+      );
+    });
+    it('emit EventEnded event', async () => {
+      await expect(eventRegistry.connect(admin).endEvent(eventAddress, RESULT.WIN_A))
+        .to.emit(eventRegistry, 'EventEnded')
+        .withArgs(eventAddress, RESULT.WIN_A);
+    });
+  });
   describe('gas cost', async () => {
     let tx;
     it('createEvent', async () => {
       tx = await eventRegistry.connect(admin).createEvent();
       await getCosts(tx);
     });
-    it('endEvent - not NO_WIN', async () => {
+    it('cancelEvent', async () => {
       tx = await eventRegistry.connect(admin).createEvent();
       receipt = await tx.wait();
       eventAddress = receipt.logs[0].args[0];
 
-      tx = await eventRegistry.connect(admin).endEvent(eventAddress, RESULT.WIN_A);
+      tx = await eventRegistry.connect(admin).cancelEvent(eventAddress);
       await getCosts(tx);
     });
     it('endEvent - NO_WIN', async () => {
@@ -342,12 +467,12 @@ describe('EventRegistry', async () => {
       tx = await eventRegistry.connect(admin).endEvent(eventAddress, RESULT.NO_WIN);
       await getCosts(tx);
     });
-    it('cancelEvent', async () => {
+    it('endEvent - WIN', async () => {
       tx = await eventRegistry.connect(admin).createEvent();
       receipt = await tx.wait();
       eventAddress = receipt.logs[0].args[0];
 
-      tx = await eventRegistry.connect(admin).cancelEvent(eventAddress);
+      tx = await eventRegistry.connect(admin).endEvent(eventAddress, RESULT.WIN_A);
       await getCosts(tx);
     });
   });

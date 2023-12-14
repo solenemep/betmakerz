@@ -16,6 +16,9 @@ import "./Event.sol";
 /// @notice Registers all event addresses
 /// @notice Carries ownable set up of events
 
+/// Event has already been closed
+error AlreadyClosed();
+
 contract EventRegistry is IEventRegistry, AccessControlUpgradeable {
     using EnumerableSet for EnumerableSet.AddressSet;
 
@@ -30,8 +33,15 @@ contract EventRegistry is IEventRegistry, AccessControlUpgradeable {
     uint256 public override commissionPercentage;
 
     event EventCreated(address indexed eventAddress);
-    event EventEnded(address indexed eventAddress);
+    event EventEnded(address indexed eventAddress, Result indexed result);
     event EventCanceled(address indexed eventAddress);
+
+    modifier eventOpened(address eventAddress) {
+        if (!_openEventAddresses.contains(eventAddress)) {
+            revert AlreadyClosed();
+        }
+        _;
+    }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -82,6 +92,11 @@ contract EventRegistry is IEventRegistry, AccessControlUpgradeable {
     }
 
     // TODO natspec
+    function setCommissionPercentage(uint256 newCommissionPercentage) external onlyRole(ADMIN_ROLE) {
+        commissionPercentage = newCommissionPercentage;
+    }
+
+    // TODO natspec
     function enableBet(address eventAddress) external onlyRole(ADMIN_ROLE) {
         if (_stopBets[eventAddress] != 0) {
             _betAllowance(eventAddress, 0);
@@ -106,11 +121,6 @@ contract EventRegistry is IEventRegistry, AccessControlUpgradeable {
 
     function _betAllowance(address eventAddress, uint256 stopBets) internal {
         _stopBets[eventAddress] = stopBets;
-    }
-
-    // TODO natspec
-    function setCommissionPercentage(uint256 newCommissionPercentage) external onlyRole(ADMIN_ROLE) {
-        commissionPercentage = newCommissionPercentage;
     }
 
     // ================
@@ -140,19 +150,19 @@ contract EventRegistry is IEventRegistry, AccessControlUpgradeable {
     }
 
     // TODO natspec
-    function endEvent(address eventAddress, Result result) external onlyRole(ADMIN_ROLE) {
-        Event(eventAddress).closeEvent(result);
-        _closeEvent(eventAddress);
-
-        emit EventEnded(eventAddress);
-    }
-
-    // TODO natspec
-    function cancelEvent(address eventAddress) external onlyRole(ADMIN_ROLE) {
+    function cancelEvent(address eventAddress) external onlyRole(ADMIN_ROLE) eventOpened(eventAddress) {
         Event(eventAddress).closeEvent(Result.NO_WIN);
         _closeEvent(eventAddress);
 
         emit EventCanceled(eventAddress);
+    }
+
+    // TODO natspec
+    function endEvent(address eventAddress, Result result) external onlyRole(ADMIN_ROLE) eventOpened(eventAddress) {
+        Event(eventAddress).closeEvent(result);
+        _closeEvent(eventAddress);
+
+        emit EventEnded(eventAddress, result);
     }
 
     function _closeEvent(address eventAddress) internal {

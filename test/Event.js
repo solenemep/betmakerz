@@ -484,6 +484,54 @@ describe('Event', async () => {
 
       await expect(event.connect(admin).closeEvent(RESULT.WIN_A)).to.be.revertedWithCustomError(event, reason);
     });
+    it('emit BetRefunded when refund (cancel)', async () => {
+      await event.connect(user1).placeBet(TEAM.TEAM_A, betAmount1, partnerID);
+      await event.connect(user2).placeBet(TEAM.TEAM_A, betAmount2, partnerID);
+
+      await expect(eventRegistry.connect(admin).cancelEvent(eventAddress))
+        .to.emit(event, 'BetRefunded')
+        .withArgs(TEAM.TEAM_A, user1.address, betAmount1)
+        .to.emit(event, 'BetRefunded')
+        .withArgs(TEAM.TEAM_A, user2.address, betAmount2);
+    });
+    it('emit BetRefunded when refund (end NO_WIN)', async () => {
+      await event.connect(user1).placeBet(TEAM.TEAM_A, betAmount1, partnerID);
+      await event.connect(user2).placeBet(TEAM.TEAM_B, betAmount2, partnerID);
+
+      await expect(eventRegistry.connect(admin).endEvent(eventAddress, RESULT.NO_WIN))
+        .to.emit(event, 'BetRefunded')
+        .withArgs(TEAM.TEAM_A, user1.address, betAmount1)
+        .to.emit(event, 'BetRefunded')
+        .withArgs(TEAM.TEAM_B, user2.address, betAmount2);
+    });
+    it('emit BetRefunded when refund (end WIN looser empty)', async () => {
+      await event.connect(user1).placeBet(TEAM.TEAM_A, betAmount1, partnerID);
+      await event.connect(user2).placeBet(TEAM.TEAM_A, betAmount2, partnerID);
+
+      await expect(eventRegistry.connect(admin).endEvent(eventAddress, RESULT.WIN_A))
+        .to.emit(event, 'BetRefunded')
+        .withArgs(TEAM.TEAM_A, user1.address, betAmount1)
+        .to.emit(event, 'BetRefunded')
+        .withArgs(TEAM.TEAM_A, user2.address, betAmount2);
+    });
+    it('emit CommissionPaid when commission (end WIN winner empty)', async () => {
+      await event.connect(user1).placeBet(TEAM.TEAM_A, betAmount1, partnerID);
+      await event.connect(user2).placeBet(TEAM.TEAM_A, betAmount2, partnerID);
+
+      await expect(eventRegistry.connect(admin).endEvent(eventAddress, RESULT.WIN_B))
+        .to.emit(event, 'LooserPoolTransfered')
+        .withArgs(toBN(betAmount1).plus(betAmount2));
+    });
+    it('emit BetRewarded when rewarded (end WIN none empty)', async () => {
+      await event.connect(user1).placeBet(TEAM.TEAM_A, betAmount1, partnerID);
+      await event.connect(user2).placeBet(TEAM.TEAM_B, betAmount2, partnerID);
+
+      await expect(eventRegistry.connect(admin).endEvent(eventAddress, RESULT.WIN_A))
+        .to.emit(event, 'BetRewarded')
+        .withArgs(TEAM.TEAM_A, user1.address, toBN(betAmount1).plus(toBN(betAmount2).times(90).div(100)))
+        .to.emit(event, 'CommissionPaid')
+        .withArgs(toBN(betAmount2).times(10).div(100));
+    });
   });
   describe('gas cost', async () => {
     let tx;
