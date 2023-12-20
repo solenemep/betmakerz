@@ -13,7 +13,7 @@ const init = async () => {
   const EventRegistry = await ethers.getContractFactory('EventRegistryMock');
   const eventRegistry = await upgrades.deployProxy(EventRegistry, [users[0].address, await usdt.getAddress()]);
   await eventRegistry.waitForDeployment();
-  console.log('EventRegistry deployed to : ', await eventRegistry.getAddress());
+  console.log('EventRegistry deployed at : ', await eventRegistry.getAddress());
 
   return {
     users,

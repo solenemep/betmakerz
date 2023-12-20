@@ -1,6 +1,14 @@
 const { expect } = require('chai');
 const { init } = require('./helpers/init.js');
-const { snapshot, restore, getCurrentBlockTimestamp, toBN, increaseTime, getCosts } = require('./helpers/utils.js');
+const {
+  snapshot,
+  restore,
+  getCurrentBlockTimestamp,
+  toBN,
+  increaseTime,
+  getCosts,
+  toWei,
+} = require('./helpers/utils.js');
 const { ADMIN_ROLE, ZERO_ADDRESS, RESULT } = require('./helpers/constants.js');
 
 describe('EventRegistry', async () => {
@@ -18,6 +26,8 @@ describe('EventRegistry', async () => {
   let admin;
 
   let timestamp;
+  let nbTeam;
+  let betAmount, partnerID;
 
   before('setup', async () => {
     const setups = await init();
@@ -33,6 +43,10 @@ describe('EventRegistry', async () => {
 
     eventRegistry = setups.eventRegistry;
     eventRegistryAddress = await eventRegistry.getAddress();
+
+    nbTeam = 8;
+    betAmount = toWei('10');
+    partnerID = 1;
 
     await eventRegistry.connect(owner).grantRole(ADMIN_ROLE, admin.address);
 
@@ -57,8 +71,7 @@ describe('EventRegistry', async () => {
   });
   describe('settings', async () => {
     beforeEach('setup', async () => {
-      // create events
-      let tx = await eventRegistry.connect(admin).createEvent();
+      let tx = await eventRegistry.connect(admin).createEvent(nbTeam);
       let receipt = await tx.wait();
       eventAddress = receipt.logs[0].args[0];
     });
@@ -192,7 +205,7 @@ describe('EventRegistry', async () => {
   });
   describe('canBet', async () => {
     beforeEach('setup', async () => {
-      let tx = await eventRegistry.connect(admin).createEvent();
+      let tx = await eventRegistry.connect(admin).createEvent(nbTeam);
       let receipt = await tx.wait();
       eventAddress = receipt.logs[0].args[0];
     });
@@ -226,7 +239,7 @@ describe('EventRegistry', async () => {
       expect(await eventRegistry.canBet(eventAddress)).to.equal(true);
     });
     it('cannot bet if ended', async () => {
-      await eventRegistry.connect(admin).endEvent(eventAddress, RESULT.WIN_A);
+      await eventRegistry.connect(admin).endEvent(eventAddress, 1);
 
       expect(await eventRegistry.canBet(eventAddress)).to.equal(false);
     });
@@ -250,7 +263,7 @@ describe('EventRegistry', async () => {
       let listOpenEvents = await eventRegistry.listOpenEvents(0, countOpenEvents);
       expect(listOpenEvents.length).to.equal(0);
 
-      let tx = await eventRegistry.connect(admin).createEvent();
+      let tx = await eventRegistry.connect(admin).createEvent(nbTeam);
       let receipt = await tx.wait();
       eventAddress = receipt.logs[0].args[0];
 
@@ -281,11 +294,11 @@ describe('EventRegistry', async () => {
       let listOpenEvents = await eventRegistry.listOpenEvents(0, countOpenEvents);
       expect(listOpenEvents.length).to.equal(0);
 
-      let tx = await eventRegistry.connect(admin).createEvent();
+      let tx = await eventRegistry.connect(admin).createEvent(nbTeam);
       let receipt = await tx.wait();
       eventAddress1 = receipt.logs[0].args[0];
 
-      tx = await eventRegistry.connect(admin).createEvent();
+      tx = await eventRegistry.connect(admin).createEvent(nbTeam);
       receipt = await tx.wait();
       eventAddress2 = receipt.logs[0].args[0];
 
@@ -308,7 +321,7 @@ describe('EventRegistry', async () => {
     it('deploy new Event contract', async () => {
       const Event = await ethers.getContractFactory('Event');
 
-      let tx = await eventRegistry.connect(admin).createEvent();
+      let tx = await eventRegistry.connect(admin).createEvent(nbTeam);
       let receipt = await tx.wait();
       eventAddress = receipt.logs[0].args[0];
       event = Event.attach(eventAddress);
@@ -316,14 +329,14 @@ describe('EventRegistry', async () => {
       expect(await event.eventRegistryAddress()).to.equal(eventRegistryAddress);
     });
     it('emit EventCreated event', async () => {
-      await expect(eventRegistry.connect(admin).createEvent()).to.emit(eventRegistry, 'EventCreated');
+      await expect(eventRegistry.connect(admin).createEvent(nbTeam)).to.emit(eventRegistry, 'EventCreated');
     });
   });
   describe('cancelEvent', async () => {
     beforeEach('setup', async () => {
       const Event = await ethers.getContractFactory('Event');
 
-      let tx = await eventRegistry.connect(admin).createEvent();
+      let tx = await eventRegistry.connect(admin).createEvent(nbTeam);
       let receipt = await tx.wait();
       eventAddress = receipt.logs[0].args[0];
       event = Event.attach(eventAddress);
@@ -361,7 +374,7 @@ describe('EventRegistry', async () => {
     it('revert if already closed - ended', async () => {
       const reason = 'AlreadyClosed';
 
-      await eventRegistry.connect(admin).endEvent(eventAddress, RESULT.WIN_A);
+      await eventRegistry.connect(admin).endEvent(eventAddress, 1);
       await expect(eventRegistry.connect(admin).cancelEvent(eventAddress)).to.be.revertedWithCustomError(
         eventRegistry,
         reason,
@@ -386,7 +399,7 @@ describe('EventRegistry', async () => {
     beforeEach('setup', async () => {
       const Event = await ethers.getContractFactory('Event');
 
-      let tx = await eventRegistry.connect(admin).createEvent();
+      let tx = await eventRegistry.connect(admin).createEvent(nbTeam);
       let receipt = await tx.wait();
       eventAddress = receipt.logs[0].args[0];
       event = Event.attach(eventAddress);
@@ -406,7 +419,7 @@ describe('EventRegistry', async () => {
       expect(listOpenEvents.length).to.equal(1);
       expect(listOpenEvents[0]).to.equal(eventAddress);
 
-      await eventRegistry.connect(admin).endEvent(eventAddress, RESULT.WIN_A);
+      await eventRegistry.connect(admin).endEvent(eventAddress, 1);
 
       countEvents = await eventRegistry.countEvents();
       expect(countEvents).to.equal(1);
@@ -424,8 +437,8 @@ describe('EventRegistry', async () => {
     it('revert if already closed - ended', async () => {
       const reason = 'AlreadyClosed';
 
-      await eventRegistry.connect(admin).endEvent(eventAddress, RESULT.WIN_A);
-      await expect(eventRegistry.connect(admin).endEvent(eventAddress, RESULT.WIN_A)).to.be.revertedWithCustomError(
+      await eventRegistry.connect(admin).endEvent(eventAddress, 1);
+      await expect(eventRegistry.connect(admin).endEvent(eventAddress, 1)).to.be.revertedWithCustomError(
         eventRegistry,
         reason,
       );
@@ -434,45 +447,105 @@ describe('EventRegistry', async () => {
       const reason = 'AlreadyClosed';
 
       await eventRegistry.connect(admin).cancelEvent(eventAddress);
-      await expect(eventRegistry.connect(admin).endEvent(eventAddress, RESULT.WIN_A)).to.be.revertedWithCustomError(
+      await expect(eventRegistry.connect(admin).endEvent(eventAddress, 1)).to.be.revertedWithCustomError(
         eventRegistry,
         reason,
       );
     });
     it('emit EventEnded event', async () => {
-      await expect(eventRegistry.connect(admin).endEvent(eventAddress, RESULT.WIN_A))
+      await expect(eventRegistry.connect(admin).endEvent(eventAddress, 1))
         .to.emit(eventRegistry, 'EventEnded')
-        .withArgs(eventAddress, RESULT.WIN_A);
+        .withArgs(eventAddress, 1);
     });
   });
   describe('gas cost', async () => {
     let tx;
     it('createEvent', async () => {
-      tx = await eventRegistry.connect(admin).createEvent();
+      tx = await eventRegistry.connect(admin).createEvent(nbTeam);
       await getCosts(tx);
     });
     it('cancelEvent', async () => {
-      tx = await eventRegistry.connect(admin).createEvent();
+      tx = await eventRegistry.connect(admin).createEvent(nbTeam);
       receipt = await tx.wait();
       eventAddress = receipt.logs[0].args[0];
+
+      await usdt.connect(owner).transfer(user1.address, toWei('1000'));
+      await usdt.connect(owner).transfer(user2.address, toWei('1000'));
+      await usdt.connect(owner).transfer(user3.address, toWei('1000'));
+
+      await usdt.connect(user1).approve(eventAddress, toWei('1000'));
+      await usdt.connect(user2).approve(eventAddress, toWei('1000'));
+      await usdt.connect(user3).approve(eventAddress, toWei('1000'));
+
+      await event.connect(user1).placeBet(1, betAmount, partnerID);
+      await event.connect(user1).placeBet(2, betAmount, partnerID);
+      await event.connect(user1).placeBet(3, betAmount, partnerID);
+
+      await event.connect(user2).placeBet(1, betAmount, partnerID);
+      await event.connect(user2).placeBet(2, betAmount, partnerID);
+      await event.connect(user2).placeBet(3, betAmount, partnerID);
+
+      await event.connect(user3).placeBet(1, betAmount, partnerID);
+      await event.connect(user3).placeBet(2, betAmount, partnerID);
+      await event.connect(user3).placeBet(3, betAmount, partnerID);
 
       tx = await eventRegistry.connect(admin).cancelEvent(eventAddress);
       await getCosts(tx);
     });
-    it('endEvent - NO_WIN', async () => {
-      tx = await eventRegistry.connect(admin).createEvent();
+    it('endEvent - DRAW', async () => {
+      tx = await eventRegistry.connect(admin).createEvent(nbTeam);
       receipt = await tx.wait();
       eventAddress = receipt.logs[0].args[0];
 
-      tx = await eventRegistry.connect(admin).endEvent(eventAddress, RESULT.NO_WIN);
+      await usdt.connect(owner).transfer(user1.address, toWei('1000'));
+      await usdt.connect(owner).transfer(user2.address, toWei('1000'));
+      await usdt.connect(owner).transfer(user3.address, toWei('1000'));
+
+      await usdt.connect(user1).approve(eventAddress, toWei('1000'));
+      await usdt.connect(user2).approve(eventAddress, toWei('1000'));
+      await usdt.connect(user3).approve(eventAddress, toWei('1000'));
+
+      await event.connect(user1).placeBet(1, betAmount, partnerID);
+      await event.connect(user1).placeBet(2, betAmount, partnerID);
+      await event.connect(user1).placeBet(3, betAmount, partnerID);
+
+      await event.connect(user2).placeBet(1, betAmount, partnerID);
+      await event.connect(user2).placeBet(2, betAmount, partnerID);
+      await event.connect(user2).placeBet(3, betAmount, partnerID);
+
+      await event.connect(user3).placeBet(1, betAmount, partnerID);
+      await event.connect(user3).placeBet(2, betAmount, partnerID);
+      await event.connect(user3).placeBet(3, betAmount, partnerID);
+
+      tx = await eventRegistry.connect(admin).endEvent(eventAddress, 0);
       await getCosts(tx);
     });
     it('endEvent - WIN', async () => {
-      tx = await eventRegistry.connect(admin).createEvent();
+      tx = await eventRegistry.connect(admin).createEvent(nbTeam);
       receipt = await tx.wait();
       eventAddress = receipt.logs[0].args[0];
 
-      tx = await eventRegistry.connect(admin).endEvent(eventAddress, RESULT.WIN_A);
+      await usdt.connect(owner).transfer(user1.address, toWei('1000'));
+      await usdt.connect(owner).transfer(user2.address, toWei('1000'));
+      await usdt.connect(owner).transfer(user3.address, toWei('1000'));
+
+      await usdt.connect(user1).approve(eventAddress, toWei('1000'));
+      await usdt.connect(user2).approve(eventAddress, toWei('1000'));
+      await usdt.connect(user3).approve(eventAddress, toWei('1000'));
+
+      await event.connect(user1).placeBet(1, betAmount, partnerID);
+      await event.connect(user1).placeBet(2, betAmount, partnerID);
+      await event.connect(user1).placeBet(3, betAmount, partnerID);
+
+      await event.connect(user2).placeBet(1, betAmount, partnerID);
+      await event.connect(user2).placeBet(2, betAmount, partnerID);
+      await event.connect(user2).placeBet(3, betAmount, partnerID);
+
+      await event.connect(user3).placeBet(1, betAmount, partnerID);
+      await event.connect(user3).placeBet(2, betAmount, partnerID);
+      await event.connect(user3).placeBet(3, betAmount, partnerID);
+
+      tx = await eventRegistry.connect(admin).endEvent(eventAddress, 1);
       await getCosts(tx);
     });
   });

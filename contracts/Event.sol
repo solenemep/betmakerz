@@ -20,6 +20,9 @@ error CannotBet();
 /// Sender must be admin from EventRegistry
 error NotEventRegistry();
 
+/// Team must exist
+error NotExistingTeam();
+
 contract Event is IEvent {
     using EnumerableSet for EnumerableSet.AddressSet;
     using EnumerableSet for EnumerableSet.UintSet;
@@ -31,16 +34,18 @@ contract Event is IEvent {
 
     uint256 public commissionPercentage;
 
-    mapping(Team => PoolInfo) internal _poolInfo;
-    mapping(Team => mapping(address => uint256)) public betAmount;
+    uint256 public nbTeam;
+    uint256 internal _totalTreasury;
+    mapping(uint256 => PoolInfo) internal _poolInfo; // teamID -> PoolInfo
+    mapping(uint256 => mapping(address => uint256)) public betAmount; // teamID -> bettor -> betAmount
 
     mapping(address => EnumerableSet.UintSet) internal _partnerIDs;
 
-    event BetPlaced(Team indexed team, address indexed bettor, uint256 indexed tokenAmount, uint256 partnerID);
-    event BetRefunded(Team indexed team, address indexed bettor, uint256 indexed tokenAmount);
-    event BetRewarded(Team indexed team, address indexed bettor, uint256 indexed tokenAmount);
+    event BetPlaced(uint256 indexed teamID, address indexed bettor, uint256 indexed tokenAmount, uint256 partnerID);
+    event BetRefunded(uint256 indexed teamID, address indexed bettor, uint256 indexed tokenAmount);
+    event BetRewarded(uint256 indexed teamID, address indexed bettor, uint256 indexed tokenAmount);
     event CommissionPaid(uint256 indexed tokenAmount);
-    event LooserPoolTransfered(uint256 indexed tokenAmount);
+    event TreasuryTransfered(uint256 indexed tokenAmount);
 
     modifier onlyEventRegistry() {
         if (msg.sender != eventRegistryAddress) {
@@ -49,10 +54,19 @@ contract Event is IEvent {
         _;
     }
 
-    constructor(address tokenAddress, uint256 commissionPercent) {
+    modifier existingTeam(uint256 teamID) {
+        if (teamID == 0 || nbTeam < teamID) {
+            revert NotExistingTeam();
+        }
+        _;
+    }
+
+    constructor(address tokenAddress, uint256 _commissionPercentage, uint256 _nbTeam) {
         token = IERC20(tokenAddress);
         eventRegistryAddress = msg.sender;
-        commissionPercentage = commissionPercent;
+
+        commissionPercentage = _commissionPercentage;
+        nbTeam = _nbTeam;
     }
 
     // =================
@@ -60,8 +74,8 @@ contract Event is IEvent {
     // =================
 
     // TODO natspec
-    function countBettorsPerTeam(Team team) external view returns (uint256) {
-        return _poolInfo[team].bettorAddresses.length();
+    function countBettorsPerTeam(uint256 teamID) external view returns (uint256) {
+        return _poolInfo[teamID].bettorAddresses.length();
     }
 
     // TODO natspec
@@ -74,9 +88,9 @@ contract Event is IEvent {
     function listBettorsPerTeam(
         uint256 offset,
         uint256 limit,
-        Team team
+        uint256 teamID
     ) external view returns (address[] memory bettorList) {
-        return Listing.listAdd(offset, limit, _poolInfo[team].bettorAddresses);
+        return Listing.listAdd(offset, limit, _poolInfo[teamID].bettorAddresses);
     }
 
     // TODO natspec
@@ -94,92 +108,88 @@ contract Event is IEvent {
     // =============
 
     // TODO natspec
-    function placeBet(Team team, uint256 tokenAmount, uint256 partnerID) external {
+    function placeBet(uint256 teamID, uint256 tokenAmount, uint256 partnerID) external existingTeam(teamID) {
         if (!IEventRegistry(eventRegistryAddress).canBet(address(this))) {
             revert CannotBet();
         }
 
-        _poolInfo[team].treasury += tokenAmount;
-        _poolInfo[team].bettorAddresses.add(msg.sender);
-        betAmount[team][msg.sender] += tokenAmount;
+        _totalTreasury += tokenAmount;
+        _poolInfo[teamID].treasury += tokenAmount;
+        _poolInfo[teamID].bettorAddresses.add(msg.sender);
+        betAmount[teamID][msg.sender] += tokenAmount;
 
         _partnerIDs[msg.sender].add(partnerID);
 
         token.transferFrom(msg.sender, address(this), tokenAmount);
 
-        emit BetPlaced(team, msg.sender, tokenAmount, partnerID);
+        emit BetPlaced(teamID, msg.sender, tokenAmount, partnerID);
     }
 
     // =================
     // ||   CLOSURE   ||
     // =================
 
-    function closeEvent(IEventRegistry.Result result) external onlyEventRegistry {
-        if (result == IEventRegistry.Result.NO_WIN) {
-            if (_poolInfo[Team.TEAM_A].treasury != 0) {
-                _refundTeam(Team.TEAM_A, _poolInfo[Team.TEAM_A].bettorAddresses.length());
-            }
-            if (_poolInfo[Team.TEAM_B].treasury != 0) {
-                _refundTeam(Team.TEAM_B, _poolInfo[Team.TEAM_B].bettorAddresses.length());
+    function closeEvent(uint256 result) external onlyEventRegistry {
+        if (result == 0) {
+            for (uint256 i = 1; i <= nbTeam; i++) {
+                if (_poolInfo[i].treasury != 0) {
+                    _refundTeam(i, _poolInfo[i].bettorAddresses.length());
+                }
             }
         } else {
-            if (result == IEventRegistry.Result.WIN_A) {
-                _distributeTeam(Team.TEAM_A, Team.TEAM_B);
-            } else if (result == IEventRegistry.Result.WIN_B) {
-                _distributeTeam(Team.TEAM_B, Team.TEAM_A);
+            _distributeTeam(result);
+        }
+    }
+
+    function _distributeTeam(uint256 winnerTeamID) internal {
+        if (_totalTreasury != 0) {
+            uint256 winnerTreasury = _poolInfo[winnerTeamID].treasury;
+            if (winnerTreasury == _totalTreasury) {
+                _refundTeam(winnerTeamID, _poolInfo[winnerTeamID].bettorAddresses.length());
+            } else if (winnerTreasury == 0) {
+                token.transfer(address(eventRegistryAddress), _totalTreasury);
+
+                emit TreasuryTransfered(_totalTreasury);
+            } else {
+                uint256 commission = ((_totalTreasury.uncheckedSub(winnerTreasury)) * commissionPercentage)
+                    .uncheckedDiv(100);
+                token.transfer(address(eventRegistryAddress), commission);
+
+                emit CommissionPaid(commission);
+
+                _rewardTeam(winnerTeamID, _poolInfo[winnerTeamID].bettorAddresses.length());
             }
         }
     }
 
-    function _distributeTeam(Team winnerTeam, Team looserTeam) internal {
-        if (_poolInfo[winnerTeam].treasury != 0 && _poolInfo[looserTeam].treasury == 0) {
-            _refundTeam(winnerTeam, _poolInfo[winnerTeam].bettorAddresses.length());
-        } else if (_poolInfo[winnerTeam].treasury == 0 && _poolInfo[looserTeam].treasury != 0) {
-            token.transfer(address(eventRegistryAddress), _poolInfo[looserTeam].treasury);
-
-            emit LooserPoolTransfered(_poolInfo[looserTeam].treasury);
-        } else if (_poolInfo[winnerTeam].treasury != 0 && _poolInfo[looserTeam].treasury != 0) {
-            uint256 commission = (_poolInfo[looserTeam].treasury * commissionPercentage).uncheckedDiv(100);
-            token.transfer(address(eventRegistryAddress), commission);
-
-            emit CommissionPaid(commission);
-
-            _rewardTeam(winnerTeam, looserTeam, _poolInfo[winnerTeam].bettorAddresses.length());
-        }
-    }
-
-    function _refundTeam(Team team, uint256 limit) internal {
+    function _refundTeam(uint256 teamID, uint256 limit) internal {
         for (uint256 i = 0; i < limit; i++) {
-            address bettor = _poolInfo[team].bettorAddresses.at(i);
-            uint256 actualBetAmount = betAmount[team][bettor];
+            address bettor = _poolInfo[teamID].bettorAddresses.at(i);
+            uint256 actualBetAmount = betAmount[teamID][bettor];
             token.transfer(bettor, actualBetAmount);
 
-            emit BetRefunded(team, bettor, actualBetAmount);
+            emit BetRefunded(teamID, bettor, actualBetAmount);
         }
     }
 
-    function _rewardTeam(Team winnerTeam, Team looserTeam, uint256 limit) internal {
+    function _rewardTeam(uint256 winnerTeamID, uint256 limit) internal {
         for (uint256 i = 0; i < limit; i++) {
-            address bettor = _poolInfo[winnerTeam].bettorAddresses.at(i);
-            uint256 actualBetAmount = betAmount[winnerTeam][bettor];
-            uint256 gainAmount = _calculateGain(winnerTeam, looserTeam, actualBetAmount, 0);
+            address bettor = _poolInfo[winnerTeamID].bettorAddresses.at(i);
+            uint256 actualBetAmount = betAmount[winnerTeamID][bettor];
+            uint256 gainAmount = _calculateGain(winnerTeamID, actualBetAmount);
 
             token.transfer(bettor, actualBetAmount + gainAmount);
 
-            emit BetRewarded(winnerTeam, bettor, actualBetAmount + gainAmount);
+            emit BetRewarded(winnerTeamID, bettor, actualBetAmount + gainAmount);
         }
     }
 
-    function _calculateGain(
-        Team winnerTeam,
-        Team looserTeam,
-        uint256 actualBetAmount,
-        uint256 potentialBetAmount
-    ) internal view returns (uint256) {
-        uint256 winnerTreasury = _poolInfo[winnerTeam].treasury + potentialBetAmount;
+    function _calculateGain(uint256 winnerTeamID, uint256 actualBetAmount) internal view returns (uint256) {
+        uint256 winnerTreasury = _poolInfo[winnerTeamID].treasury;
         return
-            ((actualBetAmount + potentialBetAmount) *
-                (_poolInfo[looserTeam].treasury * (100 - commissionPercentage)).uncheckedDiv(100)) / winnerTreasury;
+            (actualBetAmount *
+                ((_totalTreasury.uncheckedSub(winnerTreasury)) * (100 - commissionPercentage)).uncheckedDiv(100)) /
+            winnerTreasury;
     }
 
     // ====================
@@ -187,20 +197,18 @@ contract Event is IEvent {
     // ====================
 
     // TODO natspec
-    function treasury(Team team) external view returns (uint256) {
-        return _poolInfo[team].treasury;
+    function treasury(uint256 teamID) external view returns (uint256) {
+        return _poolInfo[teamID].treasury;
     }
 
     // TODO natspec
-    function potentialGain(Team team, address bettor, uint256 potentialBetAmount) external view returns (uint256) {
-        uint256 gainAmount = team == Team.TEAM_A
-            ? _calculateGain(Team.TEAM_A, Team.TEAM_B, betAmount[team][bettor], potentialBetAmount)
-            : _calculateGain(Team.TEAM_B, Team.TEAM_A, betAmount[team][bettor], potentialBetAmount);
-        return betAmount[team][bettor] + potentialBetAmount + gainAmount;
+    function potentialGain(uint256 teamID, address bettor) external view returns (uint256) {
+        uint256 gainAmount = _calculateGain(teamID, betAmount[teamID][bettor]);
+        return betAmount[teamID][bettor] + gainAmount;
     }
 
     // TODO natspec
-    function poolShare(Team team) external view returns (uint256) {
-        return (_poolInfo[team].treasury * 100) / (_poolInfo[Team.TEAM_A].treasury + _poolInfo[Team.TEAM_B].treasury);
+    function poolShare(uint256 teamID) external view returns (uint256) {
+        return (_poolInfo[teamID].treasury * 100) / _totalTreasury;
     }
 }

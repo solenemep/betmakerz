@@ -33,8 +33,8 @@ contract EventRegistry is IEventRegistry, AccessControlUpgradeable {
     uint256 public override commissionPercentage;
 
     event EventCreated(address indexed eventAddress);
-    event EventEnded(address indexed eventAddress, Result indexed result);
     event EventCanceled(address indexed eventAddress);
+    event EventEnded(address indexed eventAddress, uint256 indexed winnerTeamID);
 
     modifier eventOpened(address eventAddress) {
         if (!_openEventAddresses.contains(eventAddress)) {
@@ -139,8 +139,8 @@ contract EventRegistry is IEventRegistry, AccessControlUpgradeable {
     // ================
 
     // TODO natspec
-    function createEvent() external onlyRole(ADMIN_ROLE) {
-        Event eventContract = new Event(tokenAddress, commissionPercentage);
+    function createEvent(uint256 nbTeam) external onlyRole(ADMIN_ROLE) {
+        Event eventContract = new Event(tokenAddress, commissionPercentage, nbTeam);
         address eventAddress = address(eventContract);
 
         _eventAddresses.add(eventAddress);
@@ -151,14 +151,14 @@ contract EventRegistry is IEventRegistry, AccessControlUpgradeable {
 
     // TODO natspec
     function cancelEvent(address eventAddress) external onlyRole(ADMIN_ROLE) eventOpened(eventAddress) {
-        Event(eventAddress).closeEvent(Result.NO_WIN);
+        Event(eventAddress).closeEvent(0);
         _closeEvent(eventAddress);
 
         emit EventCanceled(eventAddress);
     }
 
     // TODO natspec
-    function endEvent(address eventAddress, Result result) external onlyRole(ADMIN_ROLE) eventOpened(eventAddress) {
+    function endEvent(address eventAddress, uint256 result) external onlyRole(ADMIN_ROLE) eventOpened(eventAddress) {
         Event(eventAddress).closeEvent(result);
         _closeEvent(eventAddress);
 
