@@ -1,7 +1,15 @@
 const { expect } = require('chai');
 const { init } = require('./helpers/init.js');
-const { snapshot, restore, toWei, getCosts, toBN } = require('./helpers/utils.js');
-const { ADMIN_ROLE, TEAM, RESULT } = require('./helpers/constants.js');
+const {
+  snapshot,
+  restore,
+  toWei,
+  getCosts,
+  toBN,
+  increaseTimeTo,
+  getCurrentBlockTimestamp,
+} = require('./helpers/utils.js');
+const { ADMIN_ROLE, RESULT } = require('./helpers/constants.js');
 
 describe('Event', async () => {
   const args = process.env;
@@ -16,7 +24,9 @@ describe('Event', async () => {
   let admin;
 
   let nbTeam;
-  let betAmount, partnerID;
+  let betAmount, minBetAmount, partnerID;
+
+  let creationDate;
 
   before('setup', async () => {
     const setups = await init();
@@ -36,7 +46,8 @@ describe('Event', async () => {
     eventRegistry = setups.eventRegistry;
     eventRegistryAddress = await eventRegistry.getAddress();
 
-    nbTeam = 3;
+    nbTeam = 6;
+    minBetAmount = toWei('2');
     betAmount = toWei('10');
     partnerID = 1;
 
@@ -44,9 +55,10 @@ describe('Event', async () => {
 
     const Event = await ethers.getContractFactory('Event');
 
-    let tx = await eventRegistry.connect(admin).createEvent(nbTeam);
+    let tx = await eventRegistry.connect(admin).createEvent(0, minBetAmount, nbTeam);
+    creationDate = await getCurrentBlockTimestamp();
     let receipt = await tx.wait();
-    eventAddress = receipt.logs[0].args[0];
+    eventAddress = receipt.logs[0].args[1];
     event = Event.attach(eventAddress);
 
     await usdt.connect(owner).transfer(user1.address, toWei('1000'));
@@ -72,8 +84,10 @@ describe('Event', async () => {
 
   describe('deployment', async () => {
     it('deploy contract successfully', async () => {
-      expect(await event.eventRegistryAddress()).to.equal(eventRegistryAddress);
+      expect(await event.token()).to.equal(usdtAddress);
+      expect(await event.eventRegistry()).to.equal(eventRegistryAddress);
       expect(await event.commissionPercentage()).to.equal(await eventRegistry.commissionPercentage());
+      expect(await event.minBetAmount()).to.equal(minBetAmount);
       expect(await event.nbTeam()).to.equal(nbTeam);
 
       expect(await eventRegistry.canBet(eventAddress)).to.equal(true);
@@ -81,11 +95,11 @@ describe('Event', async () => {
     });
   });
   describe('placeBet', async () => {
-    it('place 1 bet successfully', async () => {
-      let countBettorsPerTeam1 = await event.countBettorsPerTeam(1);
-      expect(countBettorsPerTeam1).to.equal(0);
-      let listBettorsPerTeam1 = await event.listBettorsPerTeam(0, countBettorsPerTeam1, 1);
-      expect(listBettorsPerTeam1.length).to.equal(0);
+    it('place 1 bet successfully - team', async () => {
+      let countBettorsPerPool1 = await event.countBettorsPerPool(1);
+      expect(countBettorsPerPool1).to.equal(0);
+      let listBettorsPerPool1 = await event.listBettorsPerPool(0, countBettorsPerPool1, 1);
+      expect(listBettorsPerPool1.length).to.equal(0);
 
       let countPartnerIDs1 = await event.countPartnerIDs(user1.address);
       expect(countPartnerIDs1).to.equal(0);
@@ -97,11 +111,11 @@ describe('Event', async () => {
 
       await event.connect(user1).placeBet(1, betAmount, partnerID);
 
-      countBettorsPerTeam1 = await event.countBettorsPerTeam(1);
-      expect(countBettorsPerTeam1).to.equal(1);
-      listBettorsPerTeam1 = await event.listBettorsPerTeam(0, countBettorsPerTeam1, 1);
-      expect(listBettorsPerTeam1.length).to.equal(1);
-      expect(listBettorsPerTeam1[0]).to.equal(user1.address);
+      countBettorsPerPool1 = await event.countBettorsPerPool(1);
+      expect(countBettorsPerPool1).to.equal(1);
+      listBettorsPerPool1 = await event.listBettorsPerPool(0, countBettorsPerPool1, 1);
+      expect(listBettorsPerPool1.length).to.equal(1);
+      expect(listBettorsPerPool1[0]).to.equal(user1.address);
 
       countPartnerIDs1 = await event.countPartnerIDs(user1.address);
       expect(countPartnerIDs1).to.equal(1);
@@ -112,7 +126,38 @@ describe('Event', async () => {
       expect(await event.treasury(1)).to.equal(betAmount);
       expect(await event.betAmount(1, user1.address)).to.equal(betAmount);
     });
-    it('transfer tokens', async () => {
+    it('place 1 bet successfully - draw', async () => {
+      let countBettorsPerPool0 = await event.countBettorsPerPool(0);
+      expect(countBettorsPerPool0).to.equal(0);
+      let listBettorsPerPool0 = await event.listBettorsPerPool(0, countBettorsPerPool0, 1);
+      expect(listBettorsPerPool0.length).to.equal(0);
+
+      let countPartnerIDs0 = await event.countPartnerIDs(user1.address);
+      expect(countPartnerIDs0).to.equal(0);
+      let listPartnerIDs0 = await event.listPartnerIDs(0, countPartnerIDs0, user1.address);
+      expect(listPartnerIDs0.length).to.equal(0);
+
+      expect(await event.treasury(1)).to.equal(0);
+      expect(await event.betAmount(1, user1.address)).to.equal(0);
+
+      await event.connect(user1).placeBet(0, betAmount, partnerID);
+
+      countBettorsPerPool0 = await event.countBettorsPerPool(0);
+      expect(countBettorsPerPool0).to.equal(1);
+      listBettorsPerPool0 = await event.listBettorsPerPool(0, countBettorsPerPool0, 0);
+      expect(listBettorsPerPool0.length).to.equal(1);
+      expect(listBettorsPerPool0[0]).to.equal(user1.address);
+
+      countPartnerIDs0 = await event.countPartnerIDs(user1.address);
+      expect(countPartnerIDs0).to.equal(1);
+      listPartnerIDs0 = await event.listPartnerIDs(0, countPartnerIDs0, user1.address);
+      expect(listPartnerIDs0.length).to.equal(1);
+      expect(listPartnerIDs0[0]).to.equal(partnerID);
+
+      expect(await event.treasury(0)).to.equal(betAmount);
+      expect(await event.betAmount(0, user1.address)).to.equal(betAmount);
+    });
+    it('transfer tokens - team', async () => {
       expect(await usdt.balanceOf(user1.address)).to.equal(toWei('1000'));
       expect(await usdt.balanceOf(eventAddress)).to.equal(0);
 
@@ -121,26 +166,35 @@ describe('Event', async () => {
       expect(await usdt.balanceOf(user1.address)).to.equal(toBN(toWei('1000')).minus(betAmount));
       expect(await usdt.balanceOf(eventAddress)).to.equal(betAmount);
     });
-    it('place 3 bets successfully - same user / same team', async () => {
+    it('transfer tokens - draw', async () => {
+      expect(await usdt.balanceOf(user1.address)).to.equal(toWei('1000'));
+      expect(await usdt.balanceOf(eventAddress)).to.equal(0);
+
+      await event.connect(user1).placeBet(0, betAmount, partnerID);
+
+      expect(await usdt.balanceOf(user1.address)).to.equal(toBN(toWei('1000')).minus(betAmount));
+      expect(await usdt.balanceOf(eventAddress)).to.equal(betAmount);
+    });
+    it('place 3 bets successfully - same user / same pool', async () => {
       await event.connect(user1).placeBet(1, betAmount, partnerID);
       await event.connect(user1).placeBet(1, betAmount, partnerID);
       await event.connect(user1).placeBet(1, betAmount, partnerID);
 
-      let countBettorsPerTeam1 = await event.countBettorsPerTeam(1);
-      expect(countBettorsPerTeam1).to.equal(1);
-      let listBettorsPerTeam1 = await event.listBettorsPerTeam(0, countBettorsPerTeam1, 1);
-      expect(listBettorsPerTeam1.length).to.equal(1);
-      expect(listBettorsPerTeam1[0]).to.equal(user1.address);
+      let countBettorsPerPool1 = await event.countBettorsPerPool(1);
+      expect(countBettorsPerPool1).to.equal(1);
+      let listBettorsPerPool1 = await event.listBettorsPerPool(0, countBettorsPerPool1, 1);
+      expect(listBettorsPerPool1.length).to.equal(1);
+      expect(listBettorsPerPool1[0]).to.equal(user1.address);
 
-      let countBettorsPerTeam2 = await event.countBettorsPerTeam(2);
-      expect(countBettorsPerTeam2).to.equal(0);
-      let listBettorsPerTeam2 = await event.listBettorsPerTeam(0, countBettorsPerTeam2, 2);
-      expect(listBettorsPerTeam2.length).to.equal(0);
+      let countBettorsPerPool2 = await event.countBettorsPerPool(2);
+      expect(countBettorsPerPool2).to.equal(0);
+      let listBettorsPerPool2 = await event.listBettorsPerPool(0, countBettorsPerPool2, 2);
+      expect(listBettorsPerPool2.length).to.equal(0);
 
-      let countBettorsPerTeam3 = await event.countBettorsPerTeam(3);
-      expect(countBettorsPerTeam3).to.equal(0);
-      let listBettorsPerTeam3 = await event.listBettorsPerTeam(0, countBettorsPerTeam3, 3);
-      expect(listBettorsPerTeam3.length).to.equal(0);
+      let countBettorsPerPool3 = await event.countBettorsPerPool(3);
+      expect(countBettorsPerPool3).to.equal(0);
+      let listBettorsPerPool3 = await event.listBettorsPerPool(0, countBettorsPerPool3, 3);
+      expect(listBettorsPerPool3.length).to.equal(0);
 
       let countPartnerIDs1 = await event.countPartnerIDs(user1.address);
       expect(countPartnerIDs1).to.equal(1);
@@ -174,28 +228,28 @@ describe('Event', async () => {
       expect(await event.betAmount(3, user2.address)).to.equal(0);
       expect(await event.betAmount(3, user3.address)).to.equal(0);
     });
-    it('place 2 bets successfully - same user / different team', async () => {
+    it('place 3 bets successfully - same user / different pool', async () => {
       await event.connect(user1).placeBet(1, betAmount, partnerID);
       await event.connect(user1).placeBet(2, betAmount, partnerID);
       await event.connect(user1).placeBet(3, betAmount, partnerID);
 
-      let countBettorsPerTeam1 = await event.countBettorsPerTeam(1);
-      expect(countBettorsPerTeam1).to.equal(1);
-      let listBettorsPerTeam1 = await event.listBettorsPerTeam(0, countBettorsPerTeam1, 1);
-      expect(listBettorsPerTeam1.length).to.equal(1);
-      expect(listBettorsPerTeam1[0]).to.equal(user1.address);
+      let countBettorsPerPool1 = await event.countBettorsPerPool(1);
+      expect(countBettorsPerPool1).to.equal(1);
+      let listBettorsPerPool1 = await event.listBettorsPerPool(0, countBettorsPerPool1, 1);
+      expect(listBettorsPerPool1.length).to.equal(1);
+      expect(listBettorsPerPool1[0]).to.equal(user1.address);
 
-      let countBettorsPerTeam2 = await event.countBettorsPerTeam(2);
-      expect(countBettorsPerTeam2).to.equal(1);
-      let listBettorsPerTeam2 = await event.listBettorsPerTeam(0, countBettorsPerTeam2, 2);
-      expect(listBettorsPerTeam2.length).to.equal(1);
-      expect(listBettorsPerTeam2[0]).to.equal(user1.address);
+      let countBettorsPerPool2 = await event.countBettorsPerPool(2);
+      expect(countBettorsPerPool2).to.equal(1);
+      let listBettorsPerPool2 = await event.listBettorsPerPool(0, countBettorsPerPool2, 2);
+      expect(listBettorsPerPool2.length).to.equal(1);
+      expect(listBettorsPerPool2[0]).to.equal(user1.address);
 
-      let countBettorsPerTeam3 = await event.countBettorsPerTeam(3);
-      expect(countBettorsPerTeam3).to.equal(1);
-      let listBettorsPerTeam3 = await event.listBettorsPerTeam(0, countBettorsPerTeam3, 3);
-      expect(listBettorsPerTeam3.length).to.equal(1);
-      expect(listBettorsPerTeam3[0]).to.equal(user1.address);
+      let countBettorsPerPool3 = await event.countBettorsPerPool(3);
+      expect(countBettorsPerPool3).to.equal(1);
+      let listBettorsPerPool3 = await event.listBettorsPerPool(0, countBettorsPerPool3, 3);
+      expect(listBettorsPerPool3.length).to.equal(1);
+      expect(listBettorsPerPool3[0]).to.equal(user1.address);
 
       let countPartnerIDs1 = await event.countPartnerIDs(user1.address);
       expect(countPartnerIDs1).to.equal(1);
@@ -229,28 +283,28 @@ describe('Event', async () => {
       expect(await event.betAmount(3, user2.address)).to.equal(0);
       expect(await event.betAmount(3, user3.address)).to.equal(0);
     });
-    it('place 2 bets successfully - different user / same team', async () => {
+    it('place 3 bets successfully - different user / same pool', async () => {
       await event.connect(user1).placeBet(1, betAmount, partnerID);
       await event.connect(user2).placeBet(1, betAmount, partnerID);
       await event.connect(user3).placeBet(1, betAmount, partnerID);
 
-      let countBettorsPerTeam1 = await event.countBettorsPerTeam(1);
-      expect(countBettorsPerTeam1).to.equal(3);
-      let listBettorsPerTeam1 = await event.listBettorsPerTeam(0, countBettorsPerTeam1, 1);
-      expect(listBettorsPerTeam1.length).to.equal(3);
-      expect(listBettorsPerTeam1[0]).to.equal(user1.address);
-      expect(listBettorsPerTeam1[1]).to.equal(user2.address);
-      expect(listBettorsPerTeam1[2]).to.equal(user3.address);
+      let countBettorsPerPool1 = await event.countBettorsPerPool(1);
+      expect(countBettorsPerPool1).to.equal(3);
+      let listBettorsPerPool1 = await event.listBettorsPerPool(0, countBettorsPerPool1, 1);
+      expect(listBettorsPerPool1.length).to.equal(3);
+      expect(listBettorsPerPool1[0]).to.equal(user1.address);
+      expect(listBettorsPerPool1[1]).to.equal(user2.address);
+      expect(listBettorsPerPool1[2]).to.equal(user3.address);
 
-      let countBettorsPerTeam2 = await event.countBettorsPerTeam(2);
-      expect(countBettorsPerTeam2).to.equal(0);
-      let listBettorsPerTeam2 = await event.listBettorsPerTeam(0, countBettorsPerTeam2, 2);
-      expect(listBettorsPerTeam2.length).to.equal(0);
+      let countBettorsPerPool2 = await event.countBettorsPerPool(2);
+      expect(countBettorsPerPool2).to.equal(0);
+      let listBettorsPerPool2 = await event.listBettorsPerPool(0, countBettorsPerPool2, 2);
+      expect(listBettorsPerPool2.length).to.equal(0);
 
-      let countBettorsPerTeam3 = await event.countBettorsPerTeam(3);
-      expect(countBettorsPerTeam3).to.equal(0);
-      let listBettorsPerTeam3 = await event.listBettorsPerTeam(0, countBettorsPerTeam3, 3);
-      expect(listBettorsPerTeam3.length).to.equal(0);
+      let countBettorsPerPool3 = await event.countBettorsPerPool(3);
+      expect(countBettorsPerPool3).to.equal(0);
+      let listBettorsPerPool3 = await event.listBettorsPerPool(0, countBettorsPerPool3, 3);
+      expect(listBettorsPerPool3.length).to.equal(0);
 
       let countPartnerIDs1 = await event.countPartnerIDs(user1.address);
       expect(countPartnerIDs1).to.equal(1);
@@ -286,28 +340,28 @@ describe('Event', async () => {
       expect(await event.betAmount(3, user2.address)).to.equal(0);
       expect(await event.betAmount(3, user3.address)).to.equal(0);
     });
-    it('place 2 bets successfully - different user / different team', async () => {
+    it('place 3 bets successfully - different user / different pool', async () => {
       await event.connect(user1).placeBet(1, betAmount, partnerID);
       await event.connect(user2).placeBet(2, betAmount, partnerID);
       await event.connect(user3).placeBet(3, betAmount, partnerID);
 
-      let countBettorsPerTeam1 = await event.countBettorsPerTeam(1);
-      expect(countBettorsPerTeam1).to.equal(1);
-      let listBettorsPerTeam1 = await event.listBettorsPerTeam(0, countBettorsPerTeam1, 1);
-      expect(listBettorsPerTeam1.length).to.equal(1);
-      expect(listBettorsPerTeam1[0]).to.equal(user1.address);
+      let countBettorsPerPool1 = await event.countBettorsPerPool(1);
+      expect(countBettorsPerPool1).to.equal(1);
+      let listBettorsPerPool1 = await event.listBettorsPerPool(0, countBettorsPerPool1, 1);
+      expect(listBettorsPerPool1.length).to.equal(1);
+      expect(listBettorsPerPool1[0]).to.equal(user1.address);
 
-      let countBettorsPerTeam2 = await event.countBettorsPerTeam(2);
-      expect(countBettorsPerTeam2).to.equal(1);
-      let listBettorsPerTeam2 = await event.listBettorsPerTeam(0, countBettorsPerTeam2, 2);
-      expect(listBettorsPerTeam2.length).to.equal(1);
-      expect(listBettorsPerTeam2[0]).to.equal(user2.address);
+      let countBettorsPerPool2 = await event.countBettorsPerPool(2);
+      expect(countBettorsPerPool2).to.equal(1);
+      let listBettorsPerPool2 = await event.listBettorsPerPool(0, countBettorsPerPool2, 2);
+      expect(listBettorsPerPool2.length).to.equal(1);
+      expect(listBettorsPerPool2[0]).to.equal(user2.address);
 
-      let countBettorsPerTeam3 = await event.countBettorsPerTeam(3);
-      expect(countBettorsPerTeam3).to.equal(1);
-      let listBettorsPerTeam3 = await event.listBettorsPerTeam(0, countBettorsPerTeam3, 3);
-      expect(listBettorsPerTeam3.length).to.equal(1);
-      expect(listBettorsPerTeam3[0]).to.equal(user3.address);
+      let countBettorsPerPool3 = await event.countBettorsPerPool(3);
+      expect(countBettorsPerPool3).to.equal(1);
+      let listBettorsPerPool3 = await event.listBettorsPerPool(0, countBettorsPerPool3, 3);
+      expect(listBettorsPerPool3.length).to.equal(1);
+      expect(listBettorsPerPool3[0]).to.equal(user3.address);
 
       let countPartnerIDs1 = await event.countPartnerIDs(user1.address);
       expect(countPartnerIDs1).to.equal(1);
@@ -343,17 +397,24 @@ describe('Event', async () => {
       expect(await event.betAmount(3, user2.address)).to.equal(0);
       expect(await event.betAmount(3, user3.address)).to.equal(betAmount);
     });
-    it('revert if not existing team', async () => {
-      const reason = 'NotExistingTeam';
+    it('revert if not existing pool', async () => {
+      const reason = 'NotExistingPool';
 
-      await expect(event.connect(user1).placeBet(0, betAmount, partnerID)).to.be.revertedWithCustomError(event, reason);
-      await expect(event.connect(user1).placeBet(4, betAmount, partnerID)).to.be.revertedWithCustomError(event, reason);
+      await expect(event.connect(user1).placeBet(7, betAmount, partnerID)).to.be.revertedWithCustomError(event, reason);
     });
     it('revert if bet disabled', async () => {
       const reason = 'CannotBet';
 
       await eventRegistry.connect(admin).disableBet(eventAddress);
       await expect(event.connect(user1).placeBet(1, betAmount, partnerID)).to.be.revertedWithCustomError(event, reason);
+    });
+    it('revert if bet too low', async () => {
+      const reason = 'NotSufficientBetAmount';
+
+      await expect(event.connect(user1).placeBet(1, toWei('1'), partnerID)).to.be.revertedWithCustomError(
+        event,
+        reason,
+      );
     });
     it('emit BetPlaced event', async () => {
       await expect(event.connect(user1).placeBet(1, betAmount, partnerID))
@@ -379,6 +440,8 @@ describe('Event', async () => {
       expect(await event.potentialGain(1, user5.address)).to.equal(toWei('0'));
       expect(await event.potentialGain(1, user6.address)).to.equal(toWei('0'));
 
+      await eventRegistry.connect(admin).endEvent(eventAddress, 1);
+
       const balanceU1Before = await usdt.balanceOf(user1.address);
       const balanceU2Before = await usdt.balanceOf(user2.address);
       const balanceU3Before = await usdt.balanceOf(user3.address);
@@ -386,7 +449,12 @@ describe('Event', async () => {
       const balanceU5Before = await usdt.balanceOf(user5.address);
       const balanceU6Before = await usdt.balanceOf(user6.address);
 
-      await eventRegistry.connect(admin).endEvent(eventAddress, 1);
+      await event.connect(user1).withdraw();
+      await event.connect(user2).withdraw();
+      await event.connect(user3).withdraw();
+      await event.connect(user4).withdraw();
+      await event.connect(user5).withdraw();
+      await event.connect(user6).withdraw();
 
       const balanceU1After = await usdt.balanceOf(user1.address);
       const balanceU2After = await usdt.balanceOf(user2.address);
@@ -403,145 +471,279 @@ describe('Event', async () => {
       expect(toBN(balanceU6After).minus(balanceU6Before)).to.equal(0);
     });
   });
-  describe('closeEvent', async () => {
+  describe('poolShare', async () => {
+    const betAmount1 = toWei('20');
+    const betAmount2 = toWei('60');
+    it('calculate pool share correctly', async () => {
+      await event.connect(user1).placeBet(1, betAmount1, partnerID);
+
+      expect(await event.poolShare(0)).to.equal(0);
+      expect(await event.poolShare(1)).to.equal(100);
+      expect(await event.poolShare(2)).to.equal(0);
+
+      await event.connect(user2).placeBet(2, betAmount2, partnerID);
+
+      expect(await event.poolShare(0)).to.equal(0);
+      expect(await event.poolShare(1)).to.equal(25);
+      expect(await event.poolShare(2)).to.equal(75);
+    });
+  });
+  describe('event closure', async () => {
     const betAmount1 = toWei('20');
     const betAmount2 = toWei('40');
-    it('cancel : refund both teams - one empty', async () => {
+    it('cancel event - one pool only', async () => {
       await event.connect(user1).placeBet(1, betAmount1, partnerID);
       await event.connect(user2).placeBet(1, betAmount2, partnerID);
-
-      const balanceU1Before = await usdt.balanceOf(user1.address);
-      const balanceU2Before = await usdt.balanceOf(user2.address);
-      const balanceEBefore = await usdt.balanceOf(eventAddress);
-      const balanceERBefore = await usdt.balanceOf(eventRegistryAddress);
 
       await eventRegistry.connect(admin).cancelEvent(eventAddress);
 
-      const balanceU1After = await usdt.balanceOf(user1.address);
-      const balanceU2After = await usdt.balanceOf(user2.address);
-      const balanceEAfter = await usdt.balanceOf(eventAddress);
-      const balanceERAfter = await usdt.balanceOf(eventRegistryAddress);
-
-      expect(toBN(balanceU1After).minus(balanceU1Before)).to.equal(betAmount1);
-      expect(toBN(balanceU2After).minus(balanceU2Before)).to.equal(betAmount2);
-      expect(toBN(balanceEBefore).minus(balanceEAfter)).to.equal(toBN(betAmount1).plus(betAmount2));
-      expect(toBN(balanceERAfter).minus(balanceERBefore)).to.equal(0);
+      expect(await event.gameResult()).to.equal(RESULT.NULL);
     });
-    it('cancel : refund both teams - none empty', async () => {
+    it('cancel event - several pools', async () => {
       await event.connect(user1).placeBet(1, betAmount1, partnerID);
       await event.connect(user2).placeBet(2, betAmount2, partnerID);
-
-      const balanceU1Before = await usdt.balanceOf(user1.address);
-      const balanceU2Before = await usdt.balanceOf(user2.address);
-      const balanceEBefore = await usdt.balanceOf(eventAddress);
-      const balanceERBefore = await usdt.balanceOf(eventRegistryAddress);
 
       await eventRegistry.connect(admin).cancelEvent(eventAddress);
 
-      const balanceU1After = await usdt.balanceOf(user1.address);
-      const balanceU2After = await usdt.balanceOf(user2.address);
-      const balanceEAfter = await usdt.balanceOf(eventAddress);
-      const balanceERAfter = await usdt.balanceOf(eventRegistryAddress);
-
-      expect(toBN(balanceU1After).minus(balanceU1Before)).to.equal(betAmount1);
-      expect(toBN(balanceU2After).minus(balanceU2Before)).to.equal(betAmount2);
-      expect(toBN(balanceEBefore).minus(balanceEAfter)).to.equal(toBN(betAmount1).plus(betAmount2));
-      expect(toBN(balanceERAfter).minus(balanceERBefore)).to.equal(0);
+      expect(await event.gameResult()).to.equal(RESULT.NULL);
     });
-    it('end NO_WIN : refund both teams - one empty', async () => {
+    it('end event : draw - one pool only', async () => {
       await event.connect(user1).placeBet(1, betAmount1, partnerID);
       await event.connect(user2).placeBet(1, betAmount2, partnerID);
-
-      const balanceU1Before = await usdt.balanceOf(user1.address);
-      const balanceU2Before = await usdt.balanceOf(user2.address);
-      const balanceEBefore = await usdt.balanceOf(eventAddress);
-      const balanceERBefore = await usdt.balanceOf(eventRegistryAddress);
 
       await eventRegistry.connect(admin).endEvent(eventAddress, 0);
 
-      const balanceU1After = await usdt.balanceOf(user1.address);
-      const balanceU2After = await usdt.balanceOf(user2.address);
-      const balanceEAfter = await usdt.balanceOf(eventAddress);
-      const balanceERAfter = await usdt.balanceOf(eventRegistryAddress);
-
-      expect(toBN(balanceU1After).minus(balanceU1Before)).to.equal(betAmount1);
-      expect(toBN(balanceU2After).minus(balanceU2Before)).to.equal(betAmount2);
-      expect(toBN(balanceEBefore).minus(balanceEAfter)).to.equal(toBN(betAmount1).plus(betAmount2));
-      expect(toBN(balanceERAfter).minus(balanceERBefore)).to.equal(0);
+      expect(await event.gameResult()).to.equal(RESULT.NULL);
     });
-    it('end NO_WIN : refund both teams - none empty', async () => {
+    it('end event : draw - winner pool empty', async () => {
       await event.connect(user1).placeBet(1, betAmount1, partnerID);
       await event.connect(user2).placeBet(2, betAmount2, partnerID);
 
-      const balanceU1Before = await usdt.balanceOf(user1.address);
-      const balanceU2Before = await usdt.balanceOf(user2.address);
       const balanceEBefore = await usdt.balanceOf(eventAddress);
       const balanceERBefore = await usdt.balanceOf(eventRegistryAddress);
+      const balanceOBefore = await usdt.balanceOf(owner.address);
 
       await eventRegistry.connect(admin).endEvent(eventAddress, 0);
 
-      const balanceU1After = await usdt.balanceOf(user1.address);
-      const balanceU2After = await usdt.balanceOf(user2.address);
       const balanceEAfter = await usdt.balanceOf(eventAddress);
       const balanceERAfter = await usdt.balanceOf(eventRegistryAddress);
+      const balanceOAfter = await usdt.balanceOf(owner.address);
 
-      expect(toBN(balanceU1After).minus(balanceU1Before)).to.equal(betAmount1);
-      expect(toBN(balanceU2After).minus(balanceU2Before)).to.equal(betAmount2);
       expect(toBN(balanceEBefore).minus(balanceEAfter)).to.equal(toBN(betAmount1).plus(betAmount2));
       expect(toBN(balanceERAfter).minus(balanceERBefore)).to.equal(0);
+      expect(toBN(balanceOAfter).minus(balanceOBefore)).to.equal(toBN(betAmount1).plus(betAmount2));
+
+      expect(await event.gameResult()).to.equal(RESULT.NONE);
     });
-    it('end WIN : refund winner team - looser team empty', async () => {
-      await event.connect(user1).placeBet(1, betAmount1, partnerID);
+    it('end event : draw - several pools', async () => {
+      await event.connect(user1).placeBet(0, betAmount1, partnerID);
       await event.connect(user2).placeBet(1, betAmount2, partnerID);
 
-      const balanceU1Before = await usdt.balanceOf(user1.address);
-      const balanceU2Before = await usdt.balanceOf(user2.address);
       const balanceEBefore = await usdt.balanceOf(eventAddress);
       const balanceERBefore = await usdt.balanceOf(eventRegistryAddress);
+      const balanceOBefore = await usdt.balanceOf(owner.address);
+
+      await eventRegistry.connect(admin).endEvent(eventAddress, 0);
+
+      const balanceEAfter = await usdt.balanceOf(eventAddress);
+      const balanceERAfter = await usdt.balanceOf(eventRegistryAddress);
+      const balanceOAfter = await usdt.balanceOf(owner.address);
+
+      expect(toBN(balanceEBefore).minus(balanceEAfter)).to.equal(toBN(betAmount2).times(10).div(100));
+      expect(toBN(balanceERAfter).minus(balanceERBefore)).to.equal(0);
+      expect(toBN(balanceOAfter).minus(balanceOBefore)).to.equal(toBN(betAmount2).times(10).div(100));
+
+      expect(await event.gameResult()).to.equal(RESULT.WIN);
+    });
+    it('end event : team - one pool only', async () => {
+      await event.connect(user1).placeBet(1, betAmount1, partnerID);
+      await event.connect(user2).placeBet(1, betAmount2, partnerID);
 
       await eventRegistry.connect(admin).endEvent(eventAddress, 1);
 
-      const balanceU1After = await usdt.balanceOf(user1.address);
-      const balanceU2After = await usdt.balanceOf(user2.address);
-      const balanceEAfter = await usdt.balanceOf(eventAddress);
-      const balanceERAfter = await usdt.balanceOf(eventRegistryAddress);
-
-      expect(toBN(balanceU1After).minus(balanceU1Before)).to.equal(betAmount1);
-      expect(toBN(balanceU2After).minus(balanceU2Before)).to.equal(betAmount2);
-      expect(toBN(balanceEBefore).minus(balanceEAfter)).to.equal(toBN(betAmount1).plus(betAmount2));
-      expect(toBN(balanceERAfter).minus(balanceERBefore)).to.equal(0);
+      expect(await event.gameResult()).to.equal(RESULT.NULL);
     });
-    it('end WIN : pays EventRegistry - winner team empty', async () => {
-      await event.connect(user1).placeBet(1, betAmount1, partnerID);
-      await event.connect(user2).placeBet(1, betAmount2, partnerID);
-
-      const balanceU1Before = await usdt.balanceOf(user1.address);
-      const balanceU2Before = await usdt.balanceOf(user2.address);
-      const balanceEBefore = await usdt.balanceOf(eventAddress);
-      const balanceERBefore = await usdt.balanceOf(eventRegistryAddress);
-
-      await eventRegistry.connect(admin).endEvent(eventAddress, 2);
-
-      const balanceU1After = await usdt.balanceOf(user1.address);
-      const balanceU2After = await usdt.balanceOf(user2.address);
-      const balanceEAfter = await usdt.balanceOf(eventAddress);
-      const balanceERAfter = await usdt.balanceOf(eventRegistryAddress);
-
-      expect(toBN(balanceU1After).minus(balanceU1Before)).to.equal(0);
-      expect(toBN(balanceU2After).minus(balanceU2Before)).to.equal(0);
-      expect(toBN(balanceEBefore).minus(balanceEAfter)).to.equal(toBN(betAmount1).plus(betAmount2));
-      expect(toBN(balanceERAfter).minus(balanceERBefore)).to.equal(toBN(betAmount1).plus(betAmount2));
-    });
-    it('end WIN : pays winners bettors + commission - none empty', async () => {
+    it('end event : team - winner pool empty', async () => {
       await event.connect(user1).placeBet(1, betAmount1, partnerID);
       await event.connect(user2).placeBet(2, betAmount2, partnerID);
 
+      const balanceEBefore = await usdt.balanceOf(eventAddress);
+      const balanceERBefore = await usdt.balanceOf(eventRegistryAddress);
+      const balanceOBefore = await usdt.balanceOf(owner.address);
+
+      await eventRegistry.connect(admin).endEvent(eventAddress, 3);
+
+      const balanceEAfter = await usdt.balanceOf(eventAddress);
+      const balanceERAfter = await usdt.balanceOf(eventRegistryAddress);
+      const balanceOAfter = await usdt.balanceOf(owner.address);
+
+      expect(toBN(balanceEBefore).minus(balanceEAfter)).to.equal(toBN(betAmount1).plus(betAmount2));
+      expect(toBN(balanceERAfter).minus(balanceERBefore)).to.equal(0);
+      expect(toBN(balanceOAfter).minus(balanceOBefore)).to.equal(toBN(betAmount1).plus(betAmount2));
+
+      expect(await event.gameResult()).to.equal(RESULT.NONE);
+    });
+    it('end event : team - several pools', async () => {
+      await event.connect(user1).placeBet(1, betAmount1, partnerID);
+      await event.connect(user2).placeBet(2, betAmount2, partnerID);
+
+      const balanceEBefore = await usdt.balanceOf(eventAddress);
+      const balanceERBefore = await usdt.balanceOf(eventRegistryAddress);
+      const balanceOBefore = await usdt.balanceOf(owner.address);
+
+      await eventRegistry.connect(admin).endEvent(eventAddress, 1);
+
+      const balanceEAfter = await usdt.balanceOf(eventAddress);
+      const balanceERAfter = await usdt.balanceOf(eventRegistryAddress);
+      const balanceOAfter = await usdt.balanceOf(owner.address);
+
+      expect(toBN(balanceEBefore).minus(balanceEAfter)).to.equal(toBN(betAmount2).times(10).div(100));
+      expect(toBN(balanceERAfter).minus(balanceERBefore)).to.equal(0);
+      expect(toBN(balanceOAfter).minus(balanceOBefore)).to.equal(toBN(betAmount2).times(10).div(100));
+
+      expect(await event.gameResult()).to.equal(RESULT.WIN);
+    });
+    it('revert if not EventRegistry', async () => {
+      const reason = 'NotEventRegistry';
+
+      await expect(event.connect(admin).closeEvent(RESULT.WIN, 1)).to.be.revertedWithCustomError(event, reason);
+    });
+    it('revert if not existing pool', async () => {
+      const reason = 'NotExistingPool';
+
+      await expect(eventRegistry.connect(admin).endEvent(eventAddress, 27)).to.be.revertedWithCustomError(
+        event,
+        reason,
+      );
+    });
+    it('revert if deadline passed', async () => {
+      const reason = 'DeadlinePassed';
+
+      await increaseTimeTo(
+        toBN(creationDate)
+          .plus(58 * 7 * 24 * 60 * 60)
+          .toString(),
+      );
+
+      await expect(eventRegistry.connect(admin).cancelEvent(eventAddress)).to.be.revertedWithCustomError(event, reason);
+      await expect(eventRegistry.connect(admin).endEvent(eventAddress, 5)).to.be.revertedWithCustomError(event, reason);
+    });
+    it('emit CommissionPaid when commission (end WIN none empty)', async () => {
+      await event.connect(user1).placeBet(1, betAmount1, partnerID);
+      await event.connect(user2).placeBet(2, betAmount2, partnerID);
+
+      await expect(eventRegistry.connect(admin).endEvent(eventAddress, 1))
+        .to.emit(event, 'CommissionPaid')
+        .withArgs(toBN(betAmount2).times(10).div(100));
+    });
+    it('emit TreasuryTransfered when commission (end WIN winner empty)', async () => {
+      await event.connect(user1).placeBet(0, betAmount1, partnerID);
+      await event.connect(user2).placeBet(1, betAmount2, partnerID);
+
+      await expect(eventRegistry.connect(admin).endEvent(eventAddress, 2))
+        .to.emit(event, 'TreasuryTransfered')
+        .withArgs(toBN(betAmount1).plus(betAmount2));
+    });
+  });
+  describe('withdraw', async () => {
+    const betAmount1 = toWei('20');
+    const betAmount2 = toWei('40');
+    it('withdraw when cancel - one pool only', async () => {
+      await event.connect(user1).placeBet(1, betAmount1, partnerID);
+      await event.connect(user2).placeBet(1, betAmount2, partnerID);
+
+      await eventRegistry.connect(admin).cancelEvent(eventAddress);
+
       const balanceU1Before = await usdt.balanceOf(user1.address);
       const balanceU2Before = await usdt.balanceOf(user2.address);
       const balanceEBefore = await usdt.balanceOf(eventAddress);
       const balanceERBefore = await usdt.balanceOf(eventRegistryAddress);
 
-      await eventRegistry.connect(admin).endEvent(eventAddress, 1);
+      await event.connect(user1).withdraw();
+      await event.connect(user2).withdraw();
+
+      const balanceU1After = await usdt.balanceOf(user1.address);
+      const balanceU2After = await usdt.balanceOf(user2.address);
+      const balanceEAfter = await usdt.balanceOf(eventAddress);
+      const balanceERAfter = await usdt.balanceOf(eventRegistryAddress);
+
+      expect(toBN(balanceU1After).minus(balanceU1Before)).to.equal(betAmount1);
+      expect(toBN(balanceU2After).minus(balanceU2Before)).to.equal(betAmount2);
+      expect(toBN(balanceEBefore).minus(balanceEAfter)).to.equal(toBN(betAmount1).plus(betAmount2));
+      expect(toBN(balanceERAfter).minus(balanceERBefore)).to.equal(0);
+    });
+    it('withdraw when cancel - several pools', async () => {
+      await event.connect(user1).placeBet(1, betAmount1, partnerID);
+      await event.connect(user2).placeBet(2, betAmount2, partnerID);
+
+      await eventRegistry.connect(admin).cancelEvent(eventAddress);
+
+      const balanceU1Before = await usdt.balanceOf(user1.address);
+      const balanceU2Before = await usdt.balanceOf(user2.address);
+      const balanceEBefore = await usdt.balanceOf(eventAddress);
+      const balanceERBefore = await usdt.balanceOf(eventRegistryAddress);
+
+      await event.connect(user1).withdraw();
+      await event.connect(user2).withdraw();
+
+      const balanceU1After = await usdt.balanceOf(user1.address);
+      const balanceU2After = await usdt.balanceOf(user2.address);
+      const balanceEAfter = await usdt.balanceOf(eventAddress);
+      const balanceERAfter = await usdt.balanceOf(eventRegistryAddress);
+
+      expect(toBN(balanceU1After).minus(balanceU1Before)).to.equal(betAmount1);
+      expect(toBN(balanceU2After).minus(balanceU2Before)).to.equal(betAmount2);
+      expect(toBN(balanceEBefore).minus(balanceEAfter)).to.equal(toBN(betAmount1).plus(betAmount2));
+      expect(toBN(balanceERAfter).minus(balanceERBefore)).to.equal(0);
+    });
+    it('withdraw when end : draw - one pool only', async () => {
+      await event.connect(user1).placeBet(1, betAmount1, partnerID);
+      await event.connect(user2).placeBet(1, betAmount2, partnerID);
+
+      await eventRegistry.connect(admin).endEvent(eventAddress, 0);
+
+      const balanceU1Before = await usdt.balanceOf(user1.address);
+      const balanceU2Before = await usdt.balanceOf(user2.address);
+      const balanceEBefore = await usdt.balanceOf(eventAddress);
+      const balanceERBefore = await usdt.balanceOf(eventRegistryAddress);
+
+      await event.connect(user1).withdraw();
+      await event.connect(user2).withdraw();
+
+      const balanceU1After = await usdt.balanceOf(user1.address);
+      const balanceU2After = await usdt.balanceOf(user2.address);
+      const balanceEAfter = await usdt.balanceOf(eventAddress);
+      const balanceERAfter = await usdt.balanceOf(eventRegistryAddress);
+
+      expect(toBN(balanceU1After).minus(balanceU1Before)).to.equal(betAmount1);
+      expect(toBN(balanceU2After).minus(balanceU2Before)).to.equal(betAmount2);
+      expect(toBN(balanceEBefore).minus(balanceEAfter)).to.equal(toBN(betAmount1).plus(betAmount2));
+      expect(toBN(balanceERAfter).minus(balanceERBefore)).to.equal(0);
+    });
+    it('revert withdraw when end : draw - winner pool empty', async () => {
+      const reason = 'CannotWithdraw';
+
+      await event.connect(user1).placeBet(1, betAmount1, partnerID);
+      await event.connect(user2).placeBet(2, betAmount2, partnerID);
+
+      await eventRegistry.connect(admin).endEvent(eventAddress, 0);
+
+      await expect(event.connect(user1).withdraw()).to.be.revertedWithCustomError(event, reason);
+      await expect(event.connect(user2).withdraw()).to.be.revertedWithCustomError(event, reason);
+    });
+    it('withdraw when end : draw - several pools', async () => {
+      await event.connect(user1).placeBet(0, betAmount1, partnerID);
+      await event.connect(user2).placeBet(1, betAmount2, partnerID);
+
+      await eventRegistry.connect(admin).endEvent(eventAddress, 0);
+
+      const balanceU1Before = await usdt.balanceOf(user1.address);
+      const balanceU2Before = await usdt.balanceOf(user2.address);
+      const balanceEBefore = await usdt.balanceOf(eventAddress);
+      const balanceERBefore = await usdt.balanceOf(eventRegistryAddress);
+
+      await event.connect(user1).withdraw();
+      await event.connect(user2).withdraw();
 
       const balanceU1After = await usdt.balanceOf(user1.address);
       const balanceU2After = await usdt.balanceOf(user2.address);
@@ -552,68 +754,220 @@ describe('Event', async () => {
         toBN(betAmount1).plus(toBN(betAmount2).times(90).div(100)),
       );
       expect(toBN(balanceU2After).minus(balanceU2Before)).to.equal(0);
+      expect(toBN(balanceEBefore).minus(balanceEAfter)).to.equal(
+        toBN(betAmount1).plus(toBN(betAmount2).times(90).div(100)),
+      );
+      expect(toBN(balanceERAfter).minus(balanceERBefore)).to.equal(0);
+    });
+    it('withdraw when end : team - one pool only', async () => {
+      await event.connect(user1).placeBet(1, betAmount1, partnerID);
+      await event.connect(user2).placeBet(1, betAmount2, partnerID);
+
+      await eventRegistry.connect(admin).endEvent(eventAddress, 1);
+
+      const balanceU1Before = await usdt.balanceOf(user1.address);
+      const balanceU2Before = await usdt.balanceOf(user2.address);
+      const balanceEBefore = await usdt.balanceOf(eventAddress);
+      const balanceERBefore = await usdt.balanceOf(eventRegistryAddress);
+
+      await event.connect(user1).withdraw();
+      await event.connect(user2).withdraw();
+
+      const balanceU1After = await usdt.balanceOf(user1.address);
+      const balanceU2After = await usdt.balanceOf(user2.address);
+      const balanceEAfter = await usdt.balanceOf(eventAddress);
+      const balanceERAfter = await usdt.balanceOf(eventRegistryAddress);
+
+      expect(toBN(balanceU1After).minus(balanceU1Before)).to.equal(betAmount1);
+      expect(toBN(balanceU2After).minus(balanceU2Before)).to.equal(betAmount2);
       expect(toBN(balanceEBefore).minus(balanceEAfter)).to.equal(toBN(betAmount1).plus(betAmount2));
-      expect(toBN(balanceERAfter).minus(balanceERBefore)).to.equal(toBN(betAmount2).times(10).div(100));
+      expect(toBN(balanceERAfter).minus(balanceERBefore)).to.equal(0);
     });
-    it('revert if not EventRegistry', async () => {
-      const reason = 'NotEventRegistry';
+    it('revert withdraw when end : team - winner pool empty', async () => {
+      const reason = 'CannotWithdraw';
 
-      await expect(event.connect(admin).closeEvent(1)).to.be.revertedWithCustomError(event, reason);
-    });
-    it('emit BetRefunded when refund (cancel)', async () => {
-      await event.connect(user1).placeBet(1, betAmount1, partnerID);
+      await event.connect(user1).placeBet(0, betAmount1, partnerID);
       await event.connect(user2).placeBet(1, betAmount2, partnerID);
 
-      await expect(eventRegistry.connect(admin).cancelEvent(eventAddress))
-        .to.emit(event, 'BetRefunded')
-        .withArgs(1, user1.address, betAmount1)
-        .to.emit(event, 'BetRefunded')
-        .withArgs(1, user2.address, betAmount2);
+      await eventRegistry.connect(admin).endEvent(eventAddress, 2);
+
+      await expect(event.connect(user1).withdraw()).to.be.revertedWithCustomError(event, reason);
+      await expect(event.connect(user2).withdraw()).to.be.revertedWithCustomError(event, reason);
     });
-    it('emit BetRefunded when refund (end NO_WIN)', async () => {
+    it('withdraw when end : team - several pools', async () => {
       await event.connect(user1).placeBet(1, betAmount1, partnerID);
       await event.connect(user2).placeBet(2, betAmount2, partnerID);
 
-      await expect(eventRegistry.connect(admin).endEvent(eventAddress, 0))
-        .to.emit(event, 'BetRefunded')
-        .withArgs(1, user1.address, betAmount1)
-        .to.emit(event, 'BetRefunded')
-        .withArgs(2, user2.address, betAmount2);
+      await eventRegistry.connect(admin).endEvent(eventAddress, 1);
+
+      const balanceU1Before = await usdt.balanceOf(user1.address);
+      const balanceU2Before = await usdt.balanceOf(user2.address);
+      const balanceEBefore = await usdt.balanceOf(eventAddress);
+      const balanceERBefore = await usdt.balanceOf(eventRegistryAddress);
+
+      await event.connect(user1).withdraw();
+      await event.connect(user2).withdraw();
+
+      const balanceU1After = await usdt.balanceOf(user1.address);
+      const balanceU2After = await usdt.balanceOf(user2.address);
+      const balanceEAfter = await usdt.balanceOf(eventAddress);
+      const balanceERAfter = await usdt.balanceOf(eventRegistryAddress);
+
+      expect(toBN(balanceU1After).minus(balanceU1Before)).to.equal(
+        toBN(betAmount1).plus(toBN(betAmount2).times(90).div(100)),
+      );
+      expect(toBN(balanceU2After).minus(balanceU2Before)).to.equal(0);
+      expect(toBN(balanceEBefore).minus(balanceEAfter)).to.equal(
+        toBN(betAmount1).plus(toBN(betAmount2).times(90).div(100)),
+      );
+      expect(toBN(balanceERAfter).minus(balanceERBefore)).to.equal(0);
     });
-    it('emit BetRefunded when refund (end WIN looser empty)', async () => {
+    it('withdraw nothing when already withdrawn', async () => {
       await event.connect(user1).placeBet(1, betAmount1, partnerID);
       await event.connect(user2).placeBet(1, betAmount2, partnerID);
 
-      await expect(eventRegistry.connect(admin).endEvent(eventAddress, 1))
-        .to.emit(event, 'BetRefunded')
-        .withArgs(1, user1.address, betAmount1)
-        .to.emit(event, 'BetRefunded')
-        .withArgs(1, user2.address, betAmount2);
-    });
-    it('emit CommissionPaid when commission (end WIN winner empty)', async () => {
-      await event.connect(user1).placeBet(1, betAmount1, partnerID);
-      await event.connect(user2).placeBet(1, betAmount2, partnerID);
+      await eventRegistry.connect(admin).endEvent(eventAddress, 1);
 
-      await expect(eventRegistry.connect(admin).endEvent(eventAddress, 2))
-        .to.emit(event, 'TreasuryTransfered')
-        .withArgs(toBN(betAmount1).plus(betAmount2));
+      await event.connect(user1).withdraw();
+      await event.connect(user2).withdraw();
+
+      const balanceU1Before = await usdt.balanceOf(user1.address);
+      const balanceU2Before = await usdt.balanceOf(user2.address);
+      const balanceEBefore = await usdt.balanceOf(eventAddress);
+      const balanceERBefore = await usdt.balanceOf(eventRegistryAddress);
+
+      await event.connect(user1).withdraw();
+      await event.connect(user2).withdraw();
+
+      const balanceU1After = await usdt.balanceOf(user1.address);
+      const balanceU2After = await usdt.balanceOf(user2.address);
+      const balanceEAfter = await usdt.balanceOf(eventAddress);
+      const balanceERAfter = await usdt.balanceOf(eventRegistryAddress);
+
+      expect(toBN(balanceU1After).minus(balanceU1Before)).to.equal(0);
+      expect(toBN(balanceU2After).minus(balanceU2Before)).to.equal(0);
+      expect(toBN(balanceEBefore).minus(balanceEAfter)).to.equal(0);
+      expect(toBN(balanceERAfter).minus(balanceERBefore)).to.equal(0);
     });
-    it('emit BetRewarded when rewarded (end WIN none empty)', async () => {
+    it('withdraw when deadline has passed', async () => {
       await event.connect(user1).placeBet(1, betAmount1, partnerID);
       await event.connect(user2).placeBet(2, betAmount2, partnerID);
 
-      await expect(eventRegistry.connect(admin).endEvent(eventAddress, 1))
+      await increaseTimeTo(
+        toBN(creationDate)
+          .plus(56 * 7 * 24 * 60 * 60)
+          .toString(),
+      );
+
+      const balanceU1Before = await usdt.balanceOf(user1.address);
+      const balanceU2Before = await usdt.balanceOf(user2.address);
+      const balanceEBefore = await usdt.balanceOf(eventAddress);
+      const balanceERBefore = await usdt.balanceOf(eventRegistryAddress);
+
+      await event.connect(user1).withdraw();
+      await event.connect(user2).withdraw();
+
+      const balanceU1After = await usdt.balanceOf(user1.address);
+      const balanceU2After = await usdt.balanceOf(user2.address);
+      const balanceEAfter = await usdt.balanceOf(eventAddress);
+      const balanceERAfter = await usdt.balanceOf(eventRegistryAddress);
+
+      expect(toBN(balanceU1After).minus(balanceU1Before)).to.equal(betAmount1);
+      expect(toBN(balanceU2After).minus(balanceU2Before)).to.equal(betAmount2);
+      expect(toBN(balanceEBefore).minus(balanceEAfter)).to.equal(toBN(betAmount1).plus(betAmount2));
+      expect(toBN(balanceERAfter).minus(balanceERBefore)).to.equal(0);
+    });
+    it('revert when cannot withdraw - bet in progress', async () => {
+      const reason = 'CannotWithdraw';
+
+      await event.connect(user1).placeBet(1, betAmount1, partnerID);
+      await event.connect(user2).placeBet(1, betAmount2, partnerID);
+
+      await expect(event.connect(user1).withdraw()).to.be.revertedWithCustomError(event, reason);
+      await expect(event.connect(user2).withdraw()).to.be.revertedWithCustomError(event, reason);
+    });
+    it('emit BetRefunded when result = NULL : cancel', async () => {
+      await event.connect(user1).placeBet(1, betAmount1, partnerID);
+      await event.connect(user2).placeBet(1, betAmount2, partnerID);
+
+      await eventRegistry.connect(admin).cancelEvent(eventAddress);
+
+      await expect(event.connect(user1).withdraw())
+        .to.emit(event, 'BetRefunded')
+        .withArgs(1, user1.address, betAmount1);
+      await expect(event.connect(user2).withdraw())
+        .to.emit(event, 'BetRefunded')
+        .withArgs(1, user2.address, betAmount2);
+    });
+    it('emit BetRefunded when result = NULL : one pool only', async () => {
+      await event.connect(user1).placeBet(1, betAmount1, partnerID);
+      await event.connect(user2).placeBet(1, betAmount2, partnerID);
+
+      await eventRegistry.connect(admin).endEvent(eventAddress, 0);
+
+      await expect(event.connect(user1).withdraw())
+        .to.emit(event, 'BetRefunded')
+        .withArgs(1, user1.address, betAmount1);
+      await expect(event.connect(user2).withdraw())
+        .to.emit(event, 'BetRefunded')
+        .withArgs(1, user2.address, betAmount2);
+    });
+    it('emit BetRewarded when result = WIN', async () => {
+      await event.connect(user1).placeBet(1, betAmount1, partnerID);
+      await event.connect(user2).placeBet(2, betAmount2, partnerID);
+
+      await eventRegistry.connect(admin).endEvent(eventAddress, 1);
+
+      await expect(event.connect(user1).withdraw())
         .to.emit(event, 'BetRewarded')
-        .withArgs(1, user1.address, toBN(betAmount1).plus(toBN(betAmount2).times(90).div(100)))
-        .to.emit(event, 'CommissionPaid')
-        .withArgs(toBN(betAmount2).times(10).div(100));
+        .withArgs(1, user1.address, toBN(betAmount1).plus(toBN(betAmount2).times(90).div(100)));
     });
   });
   describe('gas cost', async () => {
+    const betAmount1 = toWei('20');
+    const betAmount2 = toWei('40');
     let tx;
     it('placeBet', async () => {
       tx = await event.connect(user1).placeBet(1, betAmount, partnerID);
       await getCosts(tx);
+    });
+    describe('withdraw', async () => {
+      it('cancel event', async () => {
+        await event.connect(user1).placeBet(1, betAmount1, partnerID);
+        await event.connect(user2).placeBet(1, betAmount2, partnerID);
+
+        await eventRegistry.connect(admin).cancelEvent(eventAddress);
+
+        tx = await event.connect(user1).withdraw();
+        await getCosts(tx);
+      });
+      it('end DRAW', async () => {
+        await event.connect(user1).placeBet(1, betAmount1, partnerID);
+        await event.connect(user2).placeBet(1, betAmount2, partnerID);
+
+        await eventRegistry.connect(admin).endEvent(eventAddress, 0);
+
+        tx = await event.connect(user1).withdraw();
+        await getCosts(tx);
+      });
+      it('end WIN : looser team empty', async () => {
+        await event.connect(user1).placeBet(1, betAmount1, partnerID);
+        await event.connect(user2).placeBet(1, betAmount2, partnerID);
+
+        await eventRegistry.connect(admin).endEvent(eventAddress, 1);
+
+        tx = await event.connect(user1).withdraw();
+        await getCosts(tx);
+      });
+      it('end WIN : none empty', async () => {
+        await event.connect(user1).placeBet(1, betAmount1, partnerID);
+        await event.connect(user2).placeBet(2, betAmount2, partnerID);
+
+        await eventRegistry.connect(admin).endEvent(eventAddress, 1);
+
+        tx = await event.connect(user1).withdraw();
+        await getCosts(tx);
+      });
     });
   });
 });

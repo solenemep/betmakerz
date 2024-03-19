@@ -5,7 +5,7 @@ const args = process.env;
 const init = async () => {
   const users = await ethers.getSigners();
 
-  // deploy usdt mock
+  // deploy USDTMock
   const usdt = await ethers.deployContract('USDTMock', [users[0].address]);
   await usdt.waitForDeployment();
 

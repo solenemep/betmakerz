@@ -1,5 +1,5 @@
 {
-  "name": "betmakers",
+  "name": "betting-game",
   "scripts": {
     "solhint": "./node_modules/.bin/solhint -f table contracts/**/*.sol"
   },
@@ -23,6 +23,8 @@
     "web3": "^1.10.3"
   },
   "dependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@nomicfoundation/hardhat-verify": "^2.0.5",
     "@openzeppelin/contracts": "^5.0.0",
     "@openzeppelin/contracts-upgradeable": "^5.0.0",
     "@openzeppelin/hardhat-upgrades": "^3.0.0-alpha.0",
@@ -30,11 +32,11 @@
     "bignumber.js": "^9.1.2",
     "dotenv": "^16.3.1",
     "solhint": "^4.0.0",
-    "solhint-plugin-prettier": "^0.1.0"
+    "solhint-plugin-prettier": "^0.1.0",
+    "solidity-docgen": "^0.6.0-beta.36"
   },
   "version": "1.0.0",
   "main": "index.js",
-  "repository": "https://github.com/solenemep/betmakers.git",
   "author": "solenemep <solene.pettier@gmail.com>",
   "license": "MIT"
 }
