@@ -11,7 +11,7 @@ import "./interfaces/IEvent.sol";
 
 import "./interfaces/IEventRegistry.sol";
 
-/// @author @solenemep
+/// @author @solenemep f
 /// @title Event
 /// @notice Carries game bet and rewarding logic
 
